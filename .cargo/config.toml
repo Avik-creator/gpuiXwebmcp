@@ -1,0 +1,4 @@
+# GPUI's macOS build compiles Metal shaders via `xcrun metal`.
+# That utility lives in Xcode.app, not in Command Line Tools.
+[env]
+DEVELOPER_DIR = { value = "/Applications/Xcode.app/Contents/Developer", force = true }
