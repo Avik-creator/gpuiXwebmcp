@@ -34,4 +34,14 @@ Click the status pill to toggle **Fixture** (in-process demo, no Chrome) vs live
 
 See [plan/webmcp-debugger.md](plan/webmcp-debugger.md).
 
+## Explainer site
+
+TanStack Router app in `site/`, same colors as the GPUI window:
+
+```sh
+cd site
+npm install
+npm run dev
+```
+
 ### It's vibed.
