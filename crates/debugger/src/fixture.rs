@@ -1,5 +1,5 @@
 use chrono::{TimeZone, Utc};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use webmcp_protocol::{
     ConnectionStatus, DebuggerState, EventKind, LogEvent, Page, PageId, Tool, ToolAnnotations,
 };
@@ -68,8 +68,7 @@ pub fn execute_fixture_tool(tool: &str, arguments: &Value) -> Result<Value, Stri
 }
 
 fn timestamp(hour: u32, min: u32, sec: u32) -> chrono::DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 8, 30, hour, min, sec)
-        .unwrap()
+    Utc.with_ymd_and_hms(2026, 8, 30, hour, min, sec).unwrap()
 }
 
 fn fixture_state() -> DebuggerState {
@@ -168,15 +167,9 @@ mod tests {
     fn fixture_exposes_the_three_demo_tools() {
         let state = FixtureBackend.snapshot();
         let names: Vec<&str> = state.tools.iter().map(|tool| tool.name.as_str()).collect();
-        assert_eq!(
-            names,
-            vec!["get_user", "search_products", "create_note"]
-        );
+        assert_eq!(names, vec!["get_user", "search_products", "create_note"]);
         assert_eq!(state.connection, ConnectionStatus::Fixture);
-        assert_eq!(
-            state.selected_tool().unwrap().name,
-            "search_products"
-        );
+        assert_eq!(state.selected_tool().unwrap().name, "search_products");
         assert_eq!(
             state.selected_tool().unwrap().input_schema["properties"]["query"]["type"],
             "string"

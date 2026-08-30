@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 use tungstenite::handshake::server::{ErrorResponse, Request, Response};
-use tungstenite::{Message, accept_hdr};
+use tungstenite::{accept_hdr, Message};
 use webmcp_protocol::{BrowserEvent, DebuggerCommand, WS_HOST, WS_PORT};
 
 /// Stable unpacked extension id (from `extension/manifest.json` `key`).
@@ -71,10 +71,7 @@ impl ChromeBridge {
                 eprintln!("ws accept loop ended: {error}");
             }
         });
-        Ok(Self {
-            hub,
-            incoming: rx,
-        })
+        Ok(Self { hub, incoming: rx })
     }
 
     pub fn poll(&self) -> Vec<BridgeEvent> {
@@ -260,7 +257,8 @@ fn is_protocol_message(text: &str) -> bool {
         | Some("tool_execution_failed")
         | Some("disconnected")
         | Some("subscribe_page")
-        | Some("execute_tool") => true,
+        | Some("execute_tool")
+        | Some("open_page") => true,
         Some(_) | None => false,
     }
 }
@@ -292,6 +290,7 @@ mod tests {
     fn protocol_message_filter_accepts_known_types() {
         assert!(is_protocol_message(r#"{"type":"tools_changed"}"#));
         assert!(is_protocol_message(r#"{"type":"execute_tool"}"#));
+        assert!(is_protocol_message(r#"{"type":"open_page"}"#));
         assert!(!is_protocol_message(r#"{"type":"nope"}"#));
         assert!(!is_protocol_message("not json"));
     }

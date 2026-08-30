@@ -1,11 +1,11 @@
 use std::ops::Range;
 
 use gpui::{
-    App, Bounds, ClipboardItem, Context, CursorStyle, ElementId, ElementInputHandler, Entity,
-    EntityInputHandler, FocusHandle, Focusable, GlobalElementId, KeyBinding, LayoutId, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point, ShapedLine,
-    SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window, actions, div, fill,
-    point, prelude::*, px, relative, rgb, rgba, size,
+    actions, div, fill, point, prelude::*, px, relative, rgb, rgba, size, App, Bounds,
+    ClipboardItem, Context, CursorStyle, ElementId, ElementInputHandler, Entity,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, GlobalElementId, KeyBinding,
+    LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
+    ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -27,8 +27,13 @@ actions!(
         Paste,
         Cut,
         Copy,
+        Confirm,
     ]
 );
+
+pub enum TextInputEvent {
+    Confirm,
+}
 
 pub fn bind_text_input_keys(cx: &mut App) {
     cx.bind_keys([
@@ -49,6 +54,7 @@ pub fn bind_text_input_keys(cx: &mut App) {
         KeyBinding::new("home", Home, Some("TextInput")),
         KeyBinding::new("end", End, Some("TextInput")),
         KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some("TextInput")),
+        KeyBinding::new("enter", Confirm, Some("TextInput")),
     ]);
 }
 
@@ -62,7 +68,10 @@ pub struct TextInput {
     last_layout: Option<ShapedLine>,
     last_bounds: Option<Bounds<Pixels>>,
     is_selecting: bool,
+    confirmable: bool,
 }
+
+impl EventEmitter<TextInputEvent> for TextInput {}
 
 impl TextInput {
     pub fn new(cx: &mut Context<Self>, placeholder: impl Into<SharedString>) -> Self {
@@ -76,7 +85,13 @@ impl TextInput {
             last_layout: None,
             last_bounds: None,
             is_selecting: false,
+            confirmable: false,
         }
+    }
+
+    pub fn confirmable(mut self) -> Self {
+        self.confirmable = true;
+        self
     }
 
     pub fn text(&self) -> String {
@@ -187,6 +202,12 @@ impl TextInput {
                 self.content[self.selected_range.clone()].to_string(),
             ));
             self.replace_text_in_range(None, "", window, cx);
+        }
+    }
+
+    fn confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
+        if self.confirmable {
+            cx.emit(TextInputEvent::Confirm);
         }
     }
 
@@ -602,6 +623,7 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::copy))
+            .on_action(cx.listener(Self::confirm))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))

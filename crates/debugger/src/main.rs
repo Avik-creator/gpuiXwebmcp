@@ -2,14 +2,15 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use gpui::{
-    App, Application, Bounds, ClipboardItem, Context, Entity, FocusHandle, Focusable, KeyBinding,
-    SharedString, TitlebarOptions, Window, WindowBounds, WindowOptions, actions, div, prelude::*,
-    px, rgb, size,
+    actions, div, prelude::*, px, rgb, size, App, Application, Bounds, ClipboardItem, Context,
+    Entity, FocusHandle, Focusable, KeyBinding, SharedString, TitlebarOptions, Window,
+    WindowBounds, WindowOptions,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use webmcp_protocol::{
-    BrowserEvent, ConnectionStatus, DebuggerCommand, DebuggerState, EventKind, ExecutionId,
-    LogEvent, Page, PageId, Tool, ToolExecution,
+    find_page_for_url, normalize_inspect_url, origin_from_http_url, BrowserEvent, ConnectionStatus,
+    DebuggerCommand, DebuggerState, EventKind, ExecutionId, LogEvent, Page, PageId, Tool,
+    ToolExecution,
 };
 
 mod fixture;
@@ -19,12 +20,12 @@ mod theme;
 
 use debugger::ws::{BridgeEvent, ChromeBridge};
 use fixture::{FixtureBackend, ToolBackend};
-use input::{TextInput, bind_text_input_keys};
+use input::{bind_text_input_keys, TextInput, TextInputEvent};
 use schema::{
-    FieldKind, FormField, FormSpec, arguments_from_primitive, form_spec_from_schema,
-    required_fields_filled,
+    arguments_from_primitive, form_spec_from_schema, required_fields_filled, FieldKind, FormField,
+    FormSpec,
 };
-use theme::{GUTTER, INK, MUTE, PAPER, ROW, RUST, field_name, frame, hard_shadow, kind_cell, mono};
+use theme::{field_name, frame, hard_shadow, kind_cell, mono, GUTTER, INK, MUTE, PAPER, ROW, RUST};
 
 const EXECUTE_TIMEOUT: Duration = Duration::from_secs(15);
 const BRIDGE_POLL: Duration = Duration::from_millis(50);
@@ -80,6 +81,8 @@ struct Debugger {
     backend: BackendKind,
     bridge: Option<ChromeBridge>,
     extension_clients: usize,
+    site_input: Entity<TextInput>,
+    pending_site: Option<String>,
     focus: FocusHandle,
 }
 
@@ -89,6 +92,12 @@ impl Debugger {
             Ok(bridge) => (Some(bridge), None),
             Err(error) => (None, Some(error.to_string())),
         };
+        let site_input = cx.new(|cx| TextInput::new(cx, "http://localhost:5173").confirmable());
+        cx.observe(&site_input, |_, _, cx| cx.notify()).detach();
+        cx.subscribe(&site_input, |this, _, event, cx| match event {
+            TextInputEvent::Confirm => this.open_site(cx),
+        })
+        .detach();
         let mut this = Self {
             state: DebuggerState::waiting_for_extension(),
             form: ToolForm::empty(),
@@ -97,6 +106,8 @@ impl Debugger {
             backend: BackendKind::Live,
             bridge,
             extension_clients: 0,
+            site_input,
+            pending_site: None,
             focus: cx.focus_handle(),
         };
         if let Some(error) = bind_error {
@@ -112,15 +123,13 @@ impl Debugger {
     }
 
     fn start_bridge_pump(&self, cx: &mut Context<Self>) {
-        cx.spawn(async move |this, async_cx| {
-            loop {
-                async_cx.background_executor().timer(BRIDGE_POLL).await;
-                if this
-                    .update(async_cx, |this, cx| this.drain_bridge(cx))
-                    .is_err()
-                {
-                    break;
-                }
+        cx.spawn(async move |this, async_cx| loop {
+            async_cx.background_executor().timer(BRIDGE_POLL).await;
+            if this
+                .update(async_cx, |this, cx| this.drain_bridge(cx))
+                .is_err()
+            {
+                break;
             }
         })
         .detach();
@@ -153,6 +162,7 @@ impl Debugger {
                     if self.backend != BackendKind::Live {
                         continue;
                     }
+                    self.focus_pending_site(&browser);
                     let finishes_pending = match &browser {
                         BrowserEvent::ToolExecutionFinished { execution_id, .. }
                         | BrowserEvent::ToolExecutionFailed { execution_id, .. } => self
@@ -186,20 +196,127 @@ impl Debugger {
     fn toggle_backend(&mut self, cx: &mut Context<Self>) {
         match self.backend {
             BackendKind::Fixture => {
-                self.backend = BackendKind::Live;
-                self.pending = None;
-                self.state = DebuggerState::waiting_for_extension();
-                if self.extension_clients > 0 {
-                    self.state.connection = ConnectionStatus::Connected;
-                }
-                self.rebuild_form(cx);
+                self.switch_to_live(cx);
             }
             BackendKind::Live => {
                 self.backend = BackendKind::Fixture;
                 self.pending = None;
+                self.pending_site = None;
                 self.state = FixtureBackend.snapshot();
                 self.rebuild_form(cx);
             }
+        }
+        cx.notify();
+    }
+
+    fn switch_to_live(&mut self, cx: &mut Context<Self>) {
+        self.backend = BackendKind::Live;
+        self.pending = None;
+        self.pending_site = None;
+        self.state = DebuggerState::waiting_for_extension();
+        if self.extension_clients > 0 {
+            self.state.connection = ConnectionStatus::Connected;
+        }
+        self.rebuild_form(cx);
+    }
+
+    fn focus_pending_site(&mut self, browser: &BrowserEvent) {
+        let Some(want) = self.pending_site.as_deref() else {
+            return;
+        };
+        let (page_id, origin, url) = match browser {
+            BrowserEvent::PageChanged { page, .. } => {
+                (page.id.clone(), page.origin.as_str(), page.url.as_str())
+            }
+            BrowserEvent::ToolsChanged {
+                page_id,
+                origin,
+                url,
+                ..
+            } => (page_id.clone(), origin.as_str(), url.as_str()),
+            BrowserEvent::Hello { .. }
+            | BrowserEvent::ToolExecutionStarted { .. }
+            | BrowserEvent::ToolExecutionFinished { .. }
+            | BrowserEvent::ToolExecutionFailed { .. }
+            | BrowserEvent::Disconnected { .. } => return,
+        };
+        let origin_hit = origin.eq_ignore_ascii_case(want);
+        let url_hit = url == want
+            || origin_from_http_url(url)
+                .as_deref()
+                .is_some_and(|got| got.eq_ignore_ascii_case(want));
+        if origin_hit || url_hit {
+            self.state.selected_page = Some(page_id);
+            self.pending_site = None;
+        }
+    }
+
+    fn push_log(&mut self, kind: EventKind, message: impl Into<String>) {
+        self.state.events.push(LogEvent {
+            timestamp: Utc::now(),
+            kind,
+            message: message.into(),
+        });
+    }
+
+    fn open_site(&mut self, cx: &mut Context<Self>) {
+        let raw = self.site_input.read(cx).text();
+        let url = match normalize_inspect_url(&raw) {
+            Ok(url) => url,
+            Err(error) => {
+                self.push_log(EventKind::Disconnected, error);
+                cx.notify();
+                return;
+            }
+        };
+
+        if let Some(page) = find_page_for_url(&self.state.pages, &url).cloned() {
+            self.pending_site = None;
+            self.push_log(EventKind::PageChanged, format!("selected {}", page.url));
+            self.select_page(page.id, cx);
+            if self.backend == BackendKind::Live {
+                if let Some(bridge) = &self.bridge {
+                    let _ = bridge.send(&DebuggerCommand::OpenPage { url });
+                }
+            }
+            cx.notify();
+            return;
+        }
+
+        if self.backend == BackendKind::Fixture {
+            if self.extension_clients == 0 {
+                self.push_log(
+                    EventKind::Disconnected,
+                    format!("live chrome needed to open {url}"),
+                );
+                cx.notify();
+                return;
+            }
+            self.switch_to_live(cx);
+        }
+
+        if self.state.connection != ConnectionStatus::Connected {
+            self.push_log(
+                EventKind::Disconnected,
+                "extension not connected".to_string(),
+            );
+            cx.notify();
+            return;
+        }
+
+        self.pending_site = origin_from_http_url(&url).or_else(|| Some(url.clone()));
+        self.state.tools.clear();
+        self.state.selected_tool = None;
+        self.rebuild_form(cx);
+        let sent = self
+            .bridge
+            .as_ref()
+            .is_some_and(|bridge| bridge.send(&DebuggerCommand::OpenPage { url: url.clone() }));
+        if sent {
+            self.push_log(EventKind::PageChanged, format!("opening {url}"));
+        } else {
+            self.pending_site = None;
+            self.push_log(EventKind::Disconnected, "extension not connected");
         }
         cx.notify();
     }
@@ -272,7 +389,10 @@ impl Debugger {
         let mut map = Map::new();
         for widget in &self.form.widgets {
             if let Some(input) = &widget.input {
-                map.insert(widget.field.name.clone(), Value::String(input.read(cx).text()));
+                map.insert(
+                    widget.field.name.clone(),
+                    Value::String(input.read(cx).text()),
+                );
             }
         }
         map
@@ -318,8 +438,7 @@ impl Debugger {
         if self.pending.is_some() || self.state.selected_tool.is_none() {
             return false;
         }
-        if self.backend == BackendKind::Live
-            && self.state.connection != ConnectionStatus::Connected
+        if self.backend == BackendKind::Live && self.state.connection != ConnectionStatus::Connected
         {
             return false;
         }
@@ -402,17 +521,17 @@ impl Debugger {
                     })
                 });
                 if !sent {
-                    self.complete_execution(
-                        id,
-                        Err("extension not connected".to_string()),
-                        cx,
-                    );
+                    self.complete_execution(id, Err("extension not connected".to_string()), cx);
                     return;
                 }
                 cx.spawn(async move |this, async_cx| {
                     async_cx.background_executor().timer(EXECUTE_TIMEOUT).await;
                     this.update(async_cx, |this, cx| {
-                        if this.pending.as_ref().is_some_and(|pending| pending.id == id) {
+                        if this
+                            .pending
+                            .as_ref()
+                            .is_some_and(|pending| pending.id == id)
+                        {
                             this.complete_execution(
                                 id,
                                 Err("timed out waiting for Chrome".to_string()),
@@ -523,40 +642,78 @@ fn header(debugger: &Debugger, cx: &mut Context<Debugger>) -> impl IntoElement {
         .map(|page| page.origin.clone())
         .unwrap_or_else(|| "NO PAGE".to_string());
     let (tag, fault) = status_tag(debugger);
+    let site_input = debugger.site_input.clone();
 
     frame()
-        .flex_row()
-        .items_center()
-        .justify_between()
+        .flex_col()
         .flex_shrink_0()
-        .h(px(ROW + 8.))
-        .px_3()
         .child(
             div()
                 .flex()
+                .flex_row()
                 .items_center()
-                .gap_3()
-                .min_w_0()
-                .child(SharedString::from("WEBMCP"))
+                .justify_between()
+                .h(px(ROW + 8.))
+                .px_3()
                 .child(
                     div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
                         .min_w_0()
-                        .text_color(rgb(MUTE))
-                        .truncate()
-                        .child(SharedString::from(origin)),
+                        .child(SharedString::from("WEBMCP"))
+                        .child(
+                            div()
+                                .min_w_0()
+                                .text_color(rgb(MUTE))
+                                .truncate()
+                                .child(SharedString::from(origin)),
+                        ),
+                )
+                .child(
+                    div()
+                        .id("connection-status")
+                        .flex()
+                        .items_center()
+                        .px_2()
+                        .h(px(ROW))
+                        .cursor_pointer()
+                        .text_color(rgb(if fault { RUST } else { INK }))
+                        .on_click(cx.listener(|this, _, _, cx| this.toggle_backend(cx)))
+                        .child(SharedString::from(tag)),
                 ),
         )
         .child(
             div()
-                .id("connection-status")
                 .flex()
+                .flex_row()
                 .items_center()
-                .px_2()
-                .h(px(ROW))
-                .cursor_pointer()
-                .text_color(rgb(if fault { RUST } else { INK }))
-                .on_click(cx.listener(|this, _, _, cx| this.toggle_backend(cx)))
-                .child(SharedString::from(tag)),
+                .gap_2()
+                .px_3()
+                .pb_2()
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .text_color(rgb(MUTE))
+                        .child(SharedString::from("SITE")),
+                )
+                .child(div().flex_1().min_w_0().child(site_input))
+                .child(
+                    div()
+                        .id("open-site")
+                        .flex()
+                        .items_center()
+                        .px_2()
+                        .h(px(ROW))
+                        .flex_shrink_0()
+                        .border_1()
+                        .border_color(rgb(INK))
+                        .bg(rgb(INK))
+                        .text_color(rgb(PAPER))
+                        .cursor_pointer()
+                        .on_click(cx.listener(|this, _, _, cx| this.open_site(cx)))
+                        .child(SharedString::from("GO")),
+                ),
         )
 }
 
@@ -567,16 +724,18 @@ fn status_tag(debugger: &Debugger) -> (String, bool) {
             ConnectionStatus::Connected => {
                 (format!("[ LIVE · {} ]", debugger.extension_clients), false)
             }
-            ConnectionStatus::Disconnected | ConnectionStatus::Fixture => {
-                ("[ WAIT ]".into(), true)
-            }
+            ConnectionStatus::Disconnected | ConnectionStatus::Fixture => ("[ WAIT ]".into(), true),
         },
     }
 }
 
 fn page_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
     if state.pages.is_empty() {
-        return column("[ PAGES ]", px(228.), std::iter::once(empty_hint("NO PAGES")));
+        return column(
+            "[ PAGES ]",
+            px(228.),
+            std::iter::once(empty_hint("ENTER A SITE")),
+        );
     }
     let selected = state.selected_page.clone();
     column(
@@ -605,7 +764,9 @@ fn page_row(page: &Page, selected: bool) -> gpui::Div {
         .px_2()
         .py_1()
         .when(selected, |el| el.bg(rgb(INK)).text_color(rgb(PAPER)))
-        .when(!selected, |el| el.hover(|style| style.bg(rgb(theme::HOVER))))
+        .when(!selected, |el| {
+            el.hover(|style| style.bg(rgb(theme::HOVER)))
+        })
         .child(
             div()
                 .flex()
@@ -631,7 +792,11 @@ fn page_row(page: &Page, selected: bool) -> gpui::Div {
 
 fn tool_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
     if state.tools.is_empty() {
-        return column("[ TOOLS ]", px(268.), std::iter::once(empty_hint("NO TOOLS")));
+        return column(
+            "[ TOOLS ]",
+            px(268.),
+            std::iter::once(empty_hint("NO TOOLS")),
+        );
     }
     let selected = state.selected_tool.clone();
     column(
@@ -661,7 +826,9 @@ fn tool_row(tool: &Tool, selected: bool) -> gpui::Div {
         .px_2()
         .py_1()
         .when(selected, |el| el.bg(rgb(INK)).text_color(rgb(PAPER)))
-        .when(!selected, |el| el.hover(|style| style.bg(rgb(theme::HOVER))))
+        .when(!selected, |el| {
+            el.hover(|style| style.bg(rgb(theme::HOVER)))
+        })
         .child(
             div()
                 .flex()
@@ -760,11 +927,7 @@ fn inspector_body(
         .overflow_scroll()
         .child(SharedString::from(tool.name.clone()))
         .when(!hint.is_empty(), |el| {
-            el.child(
-                div()
-                    .text_color(rgb(MUTE))
-                    .child(SharedString::from(hint)),
-            )
+            el.child(div().text_color(rgb(MUTE)).child(SharedString::from(hint)))
         })
         .child(
             div()
@@ -804,11 +967,13 @@ fn arguments_form(debugger: &Debugger, cx: &mut Context<Debugger>) -> gpui::Div 
         }
         FormSpec::Primitive { .. } => {
             body = body.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .children(debugger.form.widgets.iter().map(|widget| field_row(widget, cx))),
+                div().flex().flex_col().gap_2().children(
+                    debugger
+                        .form
+                        .widgets
+                        .iter()
+                        .map(|widget| field_row(widget, cx)),
+                ),
             );
         }
         FormSpec::JsonFallback => {
@@ -822,11 +987,7 @@ fn arguments_form(debugger: &Debugger, cx: &mut Context<Debugger>) -> gpui::Div 
 
 fn field_row(widget: &FormWidget, cx: &mut Context<Debugger>) -> gpui::Div {
     let title = field_name(&widget.field.name, widget.field.required);
-    let mut row = div()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(muted_label(title));
+    let mut row = div().flex().flex_col().gap_1().child(muted_label(title));
     match widget.field.kind {
         FieldKind::Boolean => {
             row = row.child(bool_toggle(
@@ -898,17 +1059,12 @@ fn execute_button(enabled: bool, running: bool, cx: &mut Context<Debugger>) -> i
         .child(SharedString::from(label))
 }
 
-fn result_panel(
-    debugger: &Debugger,
-    tool_name: &str,
-    cx: &mut Context<Debugger>,
-) -> gpui::Div {
+fn result_panel(debugger: &Debugger, tool_name: &str, cx: &mut Context<Debugger>) -> gpui::Div {
     let execution = debugger.state.last_execution_for(tool_name);
-    let is_running = debugger.pending.as_ref().is_some_and(|pending| {
-        execution
-            .map(|item| item.id == pending.id)
-            .unwrap_or(false)
-    });
+    let is_running = debugger
+        .pending
+        .as_ref()
+        .is_some_and(|pending| execution.map(|item| item.id == pending.id).unwrap_or(false));
     let can_copy = execution.is_some_and(|item| item.result.is_some() || item.error.is_some());
 
     let panel = div().flex().flex_col().gap_1().child(
@@ -1023,9 +1179,7 @@ fn event_log(state: &DebuggerState) -> impl IntoElement {
                             | EventKind::ToolExecutionStarted
                             | EventKind::ToolExecutionFinished => MUTE,
                         };
-                        div()
-                            .text_color(rgb(color))
-                            .child(SharedString::from(line))
+                        div().text_color(rgb(color)).child(SharedString::from(line))
                     })
                 }),
         )
@@ -1040,6 +1194,7 @@ fn keymap_bar() -> impl IntoElement {
         .flex_shrink_0()
         .text_color(rgb(MUTE))
         .child(SharedString::from("⌘↵ EXECUTE"))
+        .child(SharedString::from("↵ OPEN SITE"))
         .child(SharedString::from("⌃T MODE"))
         .child(SharedString::from("⌘⇧C COPY"))
 }
@@ -1094,4 +1249,3 @@ fn main() {
         cx.activate(true);
     });
 }
-

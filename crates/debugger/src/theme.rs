@@ -1,5 +1,5 @@
 use gpui::{
-    BoxShadow, Div, Font, FontFallbacks, SharedString, div, font, point, prelude::*, px, rgb,
+    div, font, point, prelude::*, px, rgb, BoxShadow, Div, Font, FontFallbacks, SharedString,
 };
 
 /// Near-black ground. Not slate-900.

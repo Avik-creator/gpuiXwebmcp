@@ -147,7 +147,9 @@ pub fn required_fields_filled(
                 !string_field(strings, &field.name).is_empty()
             }
         }),
-        FormSpec::JsonFallback => json_text.trim().is_empty() || serde_json::from_str::<Value>(json_text).is_ok(),
+        FormSpec::JsonFallback => {
+            json_text.trim().is_empty() || serde_json::from_str::<Value>(json_text).is_ok()
+        }
     }
 }
 
@@ -228,11 +230,7 @@ mod tests {
             "properties": {}
         }));
         assert_eq!(spec, FormSpec::Primitive { fields: Vec::new() });
-        assert!(required_fields_filled(
-            &spec,
-            &Map::new(),
-            ""
-        ));
+        assert!(required_fields_filled(&spec, &Map::new(), ""));
     }
 
     #[test]
