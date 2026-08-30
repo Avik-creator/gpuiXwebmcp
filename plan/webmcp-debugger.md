@@ -5,8 +5,10 @@ Build a native GPUI WebMCP debugger as a developer tool: first a working four-pa
 ## Status
 
 - [x] Phase 1 — GPUI window + fixture backend (browse tools, no execute yet)
-- [ ] Phase 2 — Primitive JSON Schema form + Execute against fixture (code landed, not verified — see pickup below)
-- [ ] Phase 3 — Demo site with `get_user`, `search_products`, `create_note`
+- [x] Phase 2 — Primitive JSON Schema form + Execute against fixture
+- [x] Phase 3 — Demo site with `get_user`, `search_products`, `create_note`
+- [ ] Phase 4 — MV3 extension: `getTools` / `executeTool` / `ontoolchange` → WebSocket on `127.0.0.1` with `chrome-extension` Origin allowlist
+- [ ] Phase 5 — ChromeBridge: GPUI lists live tab tools and Execute returns real WebMCP results
 - [ ] Phase 4 — MV3 extension: `getTools` / `executeTool` / `ontoolchange` → WebSocket on `127.0.0.1` with `chrome-extension` Origin allowlist
 - [ ] Phase 5 — ChromeBridge: GPUI lists live tab tools and Execute returns real WebMCP results
 
@@ -253,12 +255,29 @@ A download of that component was started here (~688 MB) and may still be running
 
 Goal: prove WebMCP itself, independently of GPUI.
 
-- `demo-site/index.html` + `tools.js` using `document.modelContext.registerTool` (current [imperative API](https://developer.chrome.com/docs/ai/webmcp/imperative-api)).
-- Feature-detect; show a banner if the flag is off.
-- Serve over `http://localhost:...`.
-- Verify with Chrome’s official inspector or the console: `getTools()` returns 3 tools, `executeTool` works.
+Files:
 
-Done when the official inspector can call `search_products`. If this fails, the bug is Chrome/flag/site, not us.
+- [`demo-site/index.html`](../demo-site/index.html)
+- [`demo-site/tools.js`](../demo-site/tools.js)
+- [`demo-site/styles.css`](../demo-site/styles.css)
+
+The page registers the same three tools and JSON as `FixtureBackend`:
+
+- `get_user` — `{ id, name, email }`
+- `search_products` — `{ query, results: [{ id, title, author }, ...] }`
+- `create_note` — `{ ok, text }`
+
+Feature-detects `document.modelContext`. If the Chrome testing flag is off, a banner explains `chrome://flags/#enable-webmcp-testing` and the storefront still renders.
+
+Serve:
+
+```sh
+python3 -m http.server 5173 --bind 127.0.0.1 --directory demo-site
+```
+
+Open `http://localhost:5173/`. Verify with Chrome’s official inspector or the console: `getTools()` returns 3 tools, `executeTool` works.
+
+Verified in this environment: `http://127.0.0.1:5173/` loads, feature-detect shows the flag banner when `document.modelContext` is missing, and the three tool names plus catalog books render. Official inspector Execute was not verified here (no WebMCP testing flag in the Cursor browser).
 
 ## Phase 4 — Extension as a dumb bridge
 

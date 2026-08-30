@@ -325,7 +325,7 @@ fn header(state: &DebuggerState) -> impl IntoElement {
         )
 }
 
-fn page_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> impl IntoElement {
+fn page_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
     let selected = state.selected_page.clone();
     column(
         "Pages",
@@ -375,7 +375,7 @@ fn page_row(page: &Page, selected: bool) -> gpui::Div {
         )
 }
 
-fn tool_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> impl IntoElement {
+fn tool_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
     let selected = state.selected_tool.clone();
     column(
         "Tools",
@@ -417,11 +417,12 @@ fn inspector(debugger: &Debugger, cx: &mut Context<Debugger>) -> impl IntoElemen
     let enabled = debugger.can_execute(cx);
     let running = debugger.pending.is_some();
     let body = match debugger.state.selected_tool() {
-        Some(tool) => inspector_body(debugger, tool, enabled, running, cx),
+        Some(tool) => inspector_body(debugger, tool, enabled, running, cx).into_any_element(),
         None => div()
             .p_4()
             .text_color(rgb(MUTED_FG))
-            .child(SharedString::from("Select a tool")),
+            .child(SharedString::from("Select a tool"))
+            .into_any_element(),
     };
 
     div()
@@ -441,7 +442,7 @@ fn inspector_body(
     enabled: bool,
     running: bool,
     cx: &mut Context<Debugger>,
-) -> gpui::Div {
+) -> impl IntoElement {
     let schema = pretty_json(&tool.input_schema);
     let hint = match (
         tool.annotations.read_only_hint,
@@ -556,7 +557,7 @@ fn field_row(widget: &FormWidget, cx: &mut Context<Debugger>) -> gpui::Div {
     row
 }
 
-fn bool_toggle(name: String, value: bool, cx: &mut Context<Debugger>) -> gpui::Div {
+fn bool_toggle(name: String, value: bool, cx: &mut Context<Debugger>) -> impl IntoElement {
     let id = SharedString::from(format!("bool-{name}"));
     div()
         .id(id)
@@ -583,7 +584,7 @@ fn bool_toggle(name: String, value: bool, cx: &mut Context<Debugger>) -> gpui::D
         .child(SharedString::from(if value { "true" } else { "false" }))
 }
 
-fn execute_button(enabled: bool, running: bool, cx: &mut Context<Debugger>) -> gpui::Div {
+fn execute_button(enabled: bool, running: bool, cx: &mut Context<Debugger>) -> impl IntoElement {
     let label = if running { "Executing…" } else { "Execute" };
     let bg = if enabled { ACCENT } else { MUTED };
     div()
@@ -611,7 +612,7 @@ fn result_panel(debugger: &Debugger, tool_name: &str) -> gpui::Div {
             .unwrap_or(false)
     });
 
-    let mut panel = div()
+    let panel = div()
         .flex()
         .flex_col()
         .gap_1()
@@ -715,7 +716,7 @@ fn column(
     title: &'static str,
     width: gpui::Pixels,
     children: impl IntoIterator<Item = impl IntoElement>,
-) -> impl IntoElement {
+) -> gpui::Div {
     div()
         .flex()
         .flex_col()

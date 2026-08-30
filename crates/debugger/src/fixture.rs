@@ -77,7 +77,7 @@ fn fixture_state() -> DebuggerState {
     let page = Page {
         id: page_id.clone(),
         url: "http://localhost:5173/".to_string(),
-        title: "WebMCP demo",
+        title: "WebMCP demo".to_string(),
         origin: "http://localhost:5173".to_string(),
     };
 

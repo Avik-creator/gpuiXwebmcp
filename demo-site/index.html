@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebMCP demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <p class="kicker">gpuiXwebmcp</p>
+        <h1>WebMCP demo</h1>
+      </div>
+      <p id="webmcp-status" class="status" role="status">Checking WebMCP…</p>
+    </header>
+
+    <p id="flag-banner" class="banner" hidden>
+      WebMCP is not available in this document. In Chrome, enable
+      <code>chrome://flags/#enable-webmcp-testing</code>, relaunch, then reload this page.
+      The storefront below still works without the flag.
+    </p>
+
+    <main>
+      <section class="card" aria-labelledby="tools-heading">
+        <h2 id="tools-heading">Registered tools</h2>
+        <ul id="tool-list" class="tool-list">
+          <li>Waiting for registration…</li>
+        </ul>
+      </section>
+
+      <section class="card" aria-labelledby="user-heading">
+        <h2 id="user-heading">User</h2>
+        <pre id="user-output" class="output">Not loaded</pre>
+      </section>
+
+      <section class="card" aria-labelledby="search-heading">
+        <h2 id="search-heading">Catalog</h2>
+        <ul id="product-list" class="product-list"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="notes-heading">
+        <h2 id="notes-heading">Notes</h2>
+        <ul id="note-list" class="note-list">
+          <li class="muted">No notes yet. Call <code>create_note</code>.</li>
+        </ul>
+      </section>
+
+      <section class="card" aria-labelledby="log-heading">
+        <h2 id="log-heading">Last tool result</h2>
+        <pre id="last-result" class="output">None</pre>
+      </section>
+    </main>
+
+    <script type="module" src="./tools.js"></script>
+  </body>
+</html>
