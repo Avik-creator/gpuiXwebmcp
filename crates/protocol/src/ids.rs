@@ -15,6 +15,12 @@ impl From<&str> for PageId {
     }
 }
 
+impl From<String> for PageId {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct ExecutionId(pub String);
 
@@ -27,5 +33,11 @@ impl ExecutionId {
 impl From<&str> for ExecutionId {
     fn from(value: &str) -> Self {
         Self(value.to_string())
+    }
+}
+
+impl From<String> for ExecutionId {
+    fn from(value: String) -> Self {
+        Self(value)
     }
 }

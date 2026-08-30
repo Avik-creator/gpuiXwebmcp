@@ -9,4 +9,5 @@ description = "Native GPUI inspector for WebMCP tools"
 chrono.workspace = true
 gpui.workspace = true
 serde_json.workspace = true
+unicode-segmentation.workspace = true
 webmcp-protocol.workspace = true

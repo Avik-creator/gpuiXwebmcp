@@ -6,16 +6,16 @@ This is a local developer tool: it discovers page tools, lets you execute them m
 
 **Local-dev only.** Do not leave the extension loaded while browsing untrusted sites. Tool execution runs in the page as the logged-in user.
 
-## Phase 1 (current)
+## Phase 2 (current)
 
-Four-panel inspector driven by a fixture backend. No Chrome, no network.
+Four-panel inspector driven by a fixture backend. Fill primitive schema fields and Execute in-process. No Chrome, no network.
 
 ```sh
 cargo run -p debugger
 ```
 
-Click a tool on the left-middle list. The inspector schema should change. Execute is Phase 2.
+Select `search_products`, type `gpui` in the query field, click Execute. The inspector should show `{ "results": [...] }` and the event log should append started/finished.
 
-See [plan/webmcp-debugger.md](plan/webmcp-debugger.md) for the rest of the build.
+**Not verified yet.** GPUI compile needs the Xcode Metal toolchain. Pickup steps are under Phase 2 in [plan/webmcp-debugger.md](plan/webmcp-debugger.md).
 
 ### It's vibed.

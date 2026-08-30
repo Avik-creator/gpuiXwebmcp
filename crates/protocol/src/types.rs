@@ -43,3 +43,10 @@ pub struct ToolExecution {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
 }
+
+impl ToolExecution {
+    pub fn duration_ms(&self) -> Option<u64> {
+        let finished = self.finished_at?;
+        Some((finished - self.started_at).num_milliseconds().max(0) as u64)
+    }
+}

@@ -13,4 +13,5 @@ chrono = { version = "0.4", features = ["serde"] }
 gpui = "0.2.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+unicode-segmentation = "1"
 webmcp-protocol = { path = "crates/protocol" }
