@@ -7,7 +7,7 @@ Build a native GPUI WebMCP debugger as a developer tool: first a working four-pa
 - [x] Phase 1 — GPUI window + fixture backend (browse tools, no execute yet)
 - [x] Phase 2 — Primitive JSON Schema form + Execute against fixture
 - [x] Phase 3 — Demo site with `get_user`, `search_products`, `create_note`
-- [ ] Phase 4 — MV3 extension: `getTools` / `executeTool` / `ontoolchange` → WebSocket on `127.0.0.1` with `chrome-extension` Origin allowlist
+- [x] Phase 4 — MV3 extension: `getTools` / `executeTool` / `ontoolchange` → WebSocket on `127.0.0.1` with `chrome-extension` Origin allowlist
 - [ ] Phase 5 — ChromeBridge: GPUI lists live tab tools and Execute returns real WebMCP results
 
 ## Product
@@ -288,6 +288,12 @@ search_products → [Execute] → { results: [...] }
 - Results and schemas render as plain text only.
 
 Done when Execute against the demo site from GPUI matches Execute against the fixture. **That is the MVP.**
+
+`cargo run -p debugger` now binds `127.0.0.1:17321` inside the GPUI process (`ChromeBridge` in `crates/debugger/src/ws.rs`). Click the status pill to toggle Fixture vs live. Page origin is in the header; tool list shows `read-only` / `untrusted` badges. Selecting a page sends `subscribe_page`. Execute sends `execute_tool` and waits for `tool_execution_finished` / `failed` (15s timeout).
+
+Do not run the standalone `ws-server` binary at the same time as the GPUI app.
+
+Verified in this environment: `cargo test --workspace` (including `apply_browser_event`) and `cargo check -p debugger --bin debugger`. The Chrome round-trip (flag + unpacked extension + demo tab → Connected → `search_products`) was not run here.
 
 ## Explicitly out of scope for this plan
 

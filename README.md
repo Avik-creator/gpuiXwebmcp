@@ -6,9 +6,11 @@ This is a local developer tool: it discovers page tools, lets you execute them m
 
 **Local-dev only.** Do not leave the extension loaded while browsing untrusted sites. Tool execution runs in the page as the logged-in user.
 
-## Phase 4 (current)
+## Phase 5 (current)
 
-MV3 extension that bridges `document.modelContext` to a localhost WebSocket. GPUI is still fixture-only; this phase is the dumb pipe.
+The GPUI window listens on `ws://127.0.0.1:17321` (loopback only). The MV3 extension is a dumb bridge from `document.modelContext` to that socket. Execute in the inspector hits the real tab.
+
+Do **not** also run `cargo run -p debugger --bin ws-server`; that binary is only for Phase 4 CLI checks and will collide on the port.
 
 1. Enable `chrome://flags/#enable-webmcp-testing` and restart Chrome.
 
@@ -20,26 +22,16 @@ MV3 extension that bridges `document.modelContext` to a localhost WebSocket. GPU
 python3 -m http.server 5173 --bind 127.0.0.1 --directory demo-site
 ```
 
-4. Start the WebSocket server (binds `127.0.0.1:17321` only; rejects any Origin that is not `chrome-extension://ffaihbpimepkgggjclheahfddigmmfeg`):
-
-```sh
-cargo run -p debugger --bin ws-server --no-default-features
-```
-
-5. Open [http://localhost:5173/](http://localhost:5173/). Watch events:
-
-```sh
-python3 scripts/watch_bridge.py
-```
-
-You should see `hello`, `page_changed`, and `tools_changed` with `get_user`, `search_products`, and `create_note`.
-
-The GPUI inspector is still fixture Execute:
+4. Start the debugger (owns the WebSocket server):
 
 ```sh
 cargo run -p debugger
 ```
 
-See [plan/webmcp-debugger.md](plan/webmcp-debugger.md) for Phase 5.
+5. Open [http://localhost:5173/](http://localhost:5173/). The status pill should read **Connected**, the page origin should be visible, and Execute on `search_products` should return the same two books as Fixture mode.
+
+Click the status pill to toggle **Fixture** (in-process demo, no Chrome) vs live Chrome.
+
+See [plan/webmcp-debugger.md](plan/webmcp-debugger.md).
 
 ### It's vibed.
