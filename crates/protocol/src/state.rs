@@ -130,7 +130,22 @@ mod tests {
         })
         .unwrap();
         assert_eq!(json["type"], "hello");
-        assert_eq!(json["protocol_version"], 1);
+        assert_eq!(json["protocol_version"], crate::PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn tools_changed_event_uses_snake_case_type_tag() {
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 30, 18, 0, 0).unwrap();
+        let json = serde_json::to_value(BrowserEvent::ToolsChanged {
+            page_id: crate::ids::PageId::from("tab:1"),
+            origin: "http://localhost:5173".into(),
+            url: "http://localhost:5173/".into(),
+            tools: Vec::new(),
+            timestamp,
+        })
+        .unwrap();
+        assert_eq!(json["type"], "tools_changed");
+        assert_eq!(json["page_id"], "tab:1");
     }
 
     #[test]

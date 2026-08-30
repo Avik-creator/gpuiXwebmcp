@@ -259,6 +259,18 @@ Service worker  ◄──►  ws://127.0.0.1:17321
 
 Done when a small `websocat`/`python` client can see `tools_changed` from the demo tab. Optional: keep FixtureBackend as a “Demo mode” toggle.
 
+### Pickup
+
+Files:
+
+- `extension/manifest.json` — MV3, `<all_urls>`, `document_start`, `all_frames`, pinned id `ffaihbpimepkgggjclheahfddigmmfeg`
+- `extension/content.js` — `getTools` / `executeTool` / `ontoolchange` (object args, JSON-string fallback)
+- `extension/background.js` — reconnecting `ws://127.0.0.1:17321`
+- `crates/debugger/src/ws.rs` + `cargo run -p debugger --bin ws-server --no-default-features`
+- `scripts/watch_bridge.py` — CLI client that sends the extension Origin
+
+Verify: ws-server + demo site + unpacked extension + `python3 scripts/watch_bridge.py` prints `tools_changed` with the three demo tools. Then tick Phase 4 in Status.
+
 ## Phase 5 — Round-trip in GPUI
 
 Goal: the milestone from the write-up.

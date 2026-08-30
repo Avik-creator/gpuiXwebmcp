@@ -7,7 +7,22 @@ description = "Native GPUI inspector for WebMCP tools"
 
 [dependencies]
 chrono.workspace = true
-gpui.workspace = true
+gpui = { workspace = true, optional = true }
+http.workspace = true
 serde_json.workspace = true
-unicode-segmentation.workspace = true
+tungstenite.workspace = true
+unicode-segmentation = { workspace = true, optional = true }
 webmcp-protocol.workspace = true
+
+[features]
+default = ["ui"]
+ui = ["dep:gpui", "dep:unicode-segmentation"]
+
+[[bin]]
+name = "debugger"
+path = "src/main.rs"
+required-features = ["ui"]
+
+[[bin]]
+name = "ws-server"
+path = "src/bin/ws-server.rs"

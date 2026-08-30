@@ -11,7 +11,9 @@ repository = "https://github.com/Avik-creator/gpuiXwebmcp"
 [workspace.dependencies]
 chrono = { version = "0.4", features = ["serde"] }
 gpui = "0.2.2"
+http = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tungstenite = { version = "0.26", default-features = false, features = ["handshake"] }
 unicode-segmentation = "1"
 webmcp-protocol = { path = "crates/protocol" }
