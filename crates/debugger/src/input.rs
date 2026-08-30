@@ -9,11 +9,7 @@ use gpui::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-const FIELD_BG: u32 = 0x27_2F_42;
-const FIELD_BORDER: u32 = 0x47_55_69;
-const FIELD_FG: u32 = 0xF8_FA_FC;
-const PLACEHOLDER: u32 = 0x64_74_8B;
-const CURSOR: u32 = 0x22_C5_5E;
+use super::theme::{INK, MUTE, PAPER, ROW, RULE};
 
 actions!(
     text_input,
@@ -470,9 +466,9 @@ impl Element for TextElement {
         let cursor = input.cursor_offset();
         let style = window.text_style();
         let (display_text, text_color) = if content.is_empty() {
-            (input.placeholder.clone(), rgb(PLACEHOLDER).into())
+            (input.placeholder.clone(), rgb(MUTE).into())
         } else {
-            (content, rgb(FIELD_FG).into())
+            (content, rgb(INK).into())
         };
 
         let run = TextRun {
@@ -521,9 +517,9 @@ impl Element for TextElement {
                 Some(fill(
                     Bounds::new(
                         point(bounds.left() + cursor_pos, bounds.top()),
-                        size(px(2.), bounds.bottom() - bounds.top()),
+                        size(px(8.), bounds.bottom() - bounds.top()),
                     ),
-                    rgb(CURSOR),
+                    rgb(INK),
                 )),
             )
         } else {
@@ -539,7 +535,7 @@ impl Element for TextElement {
                             bounds.bottom(),
                         ),
                     ),
-                    rgba(0x22c55e40),
+                    rgba(0xE6_E1_D3_48),
                 )),
                 None,
             )
@@ -610,13 +606,13 @@ impl Render for TextInput {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .h(px(32.))
+            .h(px(ROW))
             .w_full()
             .px_2()
-            .rounded_md()
             .border_1()
-            .border_color(rgb(FIELD_BORDER))
-            .bg(rgb(FIELD_BG))
+            .border_dashed()
+            .border_color(rgb(RULE))
+            .bg(rgb(PAPER))
             .overflow_hidden()
             .child(TextElement { input: cx.entity() })
     }

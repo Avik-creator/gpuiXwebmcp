@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Native GPUI inspector for WebMCP tools"
+default-run = "debugger"
 
 [dependencies]
 chrono.workspace = true

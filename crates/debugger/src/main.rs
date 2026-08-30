@@ -2,8 +2,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use gpui::{
-    App, Application, Bounds, Context, Entity, SharedString, TitlebarOptions, Window, WindowBounds,
-    WindowOptions, div, prelude::*, px, rgb, size,
+    App, Application, Bounds, ClipboardItem, Context, Entity, FocusHandle, Focusable, KeyBinding,
+    SharedString, TitlebarOptions, Window, WindowBounds, WindowOptions, actions, div, prelude::*,
+    px, rgb, size,
 };
 use serde_json::{Map, Value, json};
 use webmcp_protocol::{
@@ -14,6 +15,7 @@ use webmcp_protocol::{
 mod fixture;
 mod input;
 mod schema;
+mod theme;
 
 use debugger::ws::{BridgeEvent, ChromeBridge};
 use fixture::{FixtureBackend, ToolBackend};
@@ -22,18 +24,21 @@ use schema::{
     FieldKind, FormField, FormSpec, arguments_from_primitive, form_spec_from_schema,
     required_fields_filled,
 };
+use theme::{GUTTER, INK, MUTE, PAPER, ROW, RUST, field_name, frame, hard_shadow, kind_cell, mono};
 
-const BG: u32 = 0x0F_17_2A;
-const CARD: u32 = 0x1B_23_36;
-const MUTED: u32 = 0x27_2F_42;
-const BORDER: u32 = 0x47_55_69;
-const FG: u32 = 0xF8_FA_FC;
-const MUTED_FG: u32 = 0x94_A3_B8;
-const ACCENT: u32 = 0x22_C5_5E;
-const SELECTED: u32 = 0x33_41_55;
-const ERROR: u32 = 0xF8_71_71;
 const EXECUTE_TIMEOUT: Duration = Duration::from_secs(15);
 const BRIDGE_POLL: Duration = Duration::from_millis(50);
+
+actions!(debugger, [ExecuteTool, ToggleBackend, CopyResult]);
+
+fn bind_debugger_keys(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("cmd-enter", ExecuteTool, Some("Debugger")),
+        KeyBinding::new("ctrl-enter", ExecuteTool, Some("Debugger")),
+        KeyBinding::new("ctrl-t", ToggleBackend, Some("Debugger")),
+        KeyBinding::new("cmd-shift-c", CopyResult, Some("Debugger")),
+    ]);
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BackendKind {
@@ -75,6 +80,7 @@ struct Debugger {
     backend: BackendKind,
     bridge: Option<ChromeBridge>,
     extension_clients: usize,
+    focus: FocusHandle,
 }
 
 impl Debugger {
@@ -91,6 +97,7 @@ impl Debugger {
             backend: BackendKind::Live,
             bridge,
             extension_clients: 0,
+            focus: cx.focus_handle(),
         };
         if let Some(error) = bind_error {
             this.state.events.push(LogEvent {
@@ -442,6 +449,29 @@ impl Debugger {
         self.pending = None;
         cx.notify();
     }
+
+    fn copy_last_result(&mut self, cx: &mut Context<Self>) {
+        let Some(name) = self.state.selected_tool.as_deref() else {
+            return;
+        };
+        let Some(execution) = self.state.last_execution_for(name) else {
+            return;
+        };
+        let text = if let Some(error) = &execution.error {
+            error.clone()
+        } else if let Some(result) = &execution.result {
+            pretty_json(result)
+        } else {
+            return;
+        };
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
+    }
+}
+
+impl Focusable for Debugger {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus.clone()
+    }
 }
 
 fn fixture_delay() -> Duration {
@@ -455,23 +485,34 @@ fn fixture_delay() -> Duration {
 impl Render for Debugger {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .key_context("Debugger")
+            .track_focus(&self.focus)
+            .on_action(cx.listener(|this, _: &ExecuteTool, _, cx| this.execute_selected(cx)))
+            .on_action(cx.listener(|this, _: &ToggleBackend, _, cx| this.toggle_backend(cx)))
+            .on_action(cx.listener(|this, _: &CopyResult, _, cx| this.copy_last_result(cx)))
             .flex()
             .flex_col()
             .size_full()
-            .bg(rgb(BG))
-            .text_color(rgb(FG))
-            .text_sm()
+            .bg(rgb(PAPER))
+            .text_color(rgb(INK))
+            .font(mono())
+            .text_size(px(12.))
+            .line_height(px(18.))
+            .p(px(GUTTER))
+            .gap(px(GUTTER))
             .child(header(self, cx))
             .child(
                 div()
                     .flex()
                     .flex_1()
                     .min_h_0()
+                    .gap(px(GUTTER))
                     .child(page_list(&self.state, cx))
                     .child(tool_list(&self.state, cx))
                     .child(inspector(self, cx)),
             )
             .child(event_log(&self.state))
+            .child(keymap_bar())
     }
 }
 
@@ -480,30 +521,28 @@ fn header(debugger: &Debugger, cx: &mut Context<Debugger>) -> impl IntoElement {
         .state
         .selected_page()
         .map(|page| page.origin.clone())
-        .unwrap_or_else(|| "no page".to_string());
-    let status = debugger.state.connection;
-    let dot = match status {
-        ConnectionStatus::Fixture | ConnectionStatus::Connected => ACCENT,
-        ConnectionStatus::Disconnected => ERROR,
-    };
-    div()
-        .flex()
+        .unwrap_or_else(|| "NO PAGE".to_string());
+    let (tag, fault) = status_tag(debugger);
+
+    frame()
+        .flex_row()
         .items_center()
         .justify_between()
-        .px_4()
-        .py_3()
-        .border_b_1()
-        .border_color(rgb(BORDER))
-        .bg(rgb(CARD))
+        .flex_shrink_0()
+        .h(px(ROW + 8.))
+        .px_3()
         .child(
             div()
                 .flex()
                 .items_center()
                 .gap_3()
-                .child(SharedString::from("WebMCP Debugger"))
+                .min_w_0()
+                .child(SharedString::from("WEBMCP"))
                 .child(
                     div()
-                        .text_color(rgb(MUTED_FG))
+                        .min_w_0()
+                        .text_color(rgb(MUTE))
+                        .truncate()
                         .child(SharedString::from(origin)),
                 ),
         )
@@ -512,26 +551,37 @@ fn header(debugger: &Debugger, cx: &mut Context<Debugger>) -> impl IntoElement {
                 .id("connection-status")
                 .flex()
                 .items_center()
-                .gap_2()
+                .px_2()
+                .h(px(ROW))
                 .cursor_pointer()
+                .text_color(rgb(if fault { RUST } else { INK }))
                 .on_click(cx.listener(|this, _, _, cx| this.toggle_backend(cx)))
-                .child(div().size(px(8.)).rounded_full().bg(rgb(dot)))
-                .child(
-                    div()
-                        .text_color(rgb(MUTED_FG))
-                        .child(SharedString::from(status.as_label())),
-                ),
+                .child(SharedString::from(tag)),
         )
+}
+
+fn status_tag(debugger: &Debugger) -> (String, bool) {
+    match debugger.backend {
+        BackendKind::Fixture => ("[ FIXTURE ]".into(), false),
+        BackendKind::Live => match debugger.state.connection {
+            ConnectionStatus::Connected => {
+                (format!("[ LIVE · {} ]", debugger.extension_clients), false)
+            }
+            ConnectionStatus::Disconnected | ConnectionStatus::Fixture => {
+                ("[ WAIT ]".into(), true)
+            }
+        },
+    }
 }
 
 fn page_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
     if state.pages.is_empty() {
-        return column("Pages", px(220.), std::iter::once(empty_hint("No pages")));
+        return column("[ PAGES ]", px(228.), std::iter::once(empty_hint("NO PAGES")));
     }
     let selected = state.selected_page.clone();
     column(
-        "Pages",
-        px(220.),
+        "[ PAGES ]",
+        px(228.),
         state.pages.iter().map(|page| {
             let id = page.id.clone();
             let is_selected = selected.as_ref() == Some(&id);
@@ -546,45 +596,47 @@ fn page_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
 }
 
 fn page_row(page: &Page, selected: bool) -> gpui::Div {
-    let bg = if selected { SELECTED } else { CARD };
+    let fg = if selected { PAPER } else { INK };
+    let dim = if selected { PAPER } else { MUTE };
+    let mark = if selected { "*" } else { " " };
     div()
         .flex()
         .flex_col()
-        .gap_1()
-        .px_3()
-        .py_2()
-        .rounded_md()
-        .bg(rgb(bg))
-        .hover(|style| style.bg(rgb(MUTED)))
+        .px_2()
+        .py_1()
+        .when(selected, |el| el.bg(rgb(INK)).text_color(rgb(PAPER)))
+        .when(!selected, |el| el.hover(|style| style.bg(rgb(theme::HOVER))))
         .child(
             div()
                 .flex()
-                .items_center()
                 .gap_2()
+                .min_w_0()
+                .child(SharedString::from(mark))
                 .child(
                     div()
-                        .size(px(6.))
-                        .rounded_full()
-                        .bg(rgb(if selected { ACCENT } else { MUTED_FG })),
-                )
-                .child(SharedString::from(page.origin.clone())),
+                        .min_w_0()
+                        .truncate()
+                        .text_color(rgb(fg))
+                        .child(SharedString::from(page.origin.clone())),
+                ),
         )
         .child(
             div()
                 .pl_4()
-                .text_color(rgb(MUTED_FG))
+                .truncate()
+                .text_color(rgb(dim))
                 .child(SharedString::from(page.title.clone())),
         )
 }
 
 fn tool_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
     if state.tools.is_empty() {
-        return column("Tools", px(260.), std::iter::once(empty_hint("No tools")));
+        return column("[ TOOLS ]", px(268.), std::iter::once(empty_hint("NO TOOLS")));
     }
     let selected = state.selected_tool.clone();
     column(
-        "Tools",
-        px(260.),
+        "[ TOOLS ]",
+        px(268.),
         state.tools.iter().map(|tool| {
             let name = tool.name.clone();
             let is_selected = selected.as_deref() == Some(name.as_str());
@@ -599,49 +651,63 @@ fn tool_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
 }
 
 fn tool_row(tool: &Tool, selected: bool) -> gpui::Div {
-    let bg = if selected { SELECTED } else { CARD };
-    let label = tool.title.clone().unwrap_or_else(|| tool.name.clone());
+    let fg = if selected { PAPER } else { INK };
+    let dim = if selected { PAPER } else { MUTE };
+    let mark = if selected { "*" } else { " " };
+    let title = tool.title.clone().unwrap_or_else(|| tool.name.clone());
     div()
         .flex()
         .flex_col()
-        .gap_1()
-        .px_3()
-        .py_2()
-        .rounded_md()
-        .bg(rgb(bg))
-        .hover(|style| style.bg(rgb(MUTED)))
-        .child(SharedString::from(tool.name.clone()))
+        .px_2()
+        .py_1()
+        .when(selected, |el| el.bg(rgb(INK)).text_color(rgb(PAPER)))
+        .when(!selected, |el| el.hover(|style| style.bg(rgb(theme::HOVER))))
         .child(
             div()
-                .text_color(rgb(MUTED_FG))
-                .child(SharedString::from(label)),
+                .flex()
+                .gap_2()
+                .min_w_0()
+                .child(SharedString::from(mark))
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_color(rgb(fg))
+                        .child(SharedString::from(tool.name.clone())),
+                )
+                .children(annotation_marks(tool).into_iter().map(|mark| {
+                    div()
+                        .flex_shrink_0()
+                        .text_color(rgb(dim))
+                        .child(SharedString::from(mark))
+                })),
         )
-        .when_some(annotation_badge(tool), |el, badge| {
-            el.child(
-                div()
-                    .text_color(rgb(MUTED_FG))
-                    .child(SharedString::from(badge)),
-            )
-        })
+        .child(
+            div()
+                .pl_4()
+                .truncate()
+                .text_color(rgb(dim))
+                .child(SharedString::from(title)),
+        )
 }
 
-fn annotation_badge(tool: &Tool) -> Option<String> {
+fn annotation_marks(tool: &Tool) -> Vec<String> {
     match (
         tool.annotations.read_only_hint,
         tool.annotations.untrusted_content_hint,
     ) {
-        (Some(true), Some(true)) => Some("read-only · untrusted".to_string()),
-        (Some(true), _) => Some("read-only".to_string()),
-        (_, Some(true)) => Some("untrusted".to_string()),
-        _ => None,
+        (Some(true), Some(true)) => vec!["[RO]".into(), "[UNTRUSTED]".into()],
+        (Some(true), _) => vec!["[RO]".into()],
+        (_, Some(true)) => vec!["[UNTRUSTED]".into()],
+        _ => Vec::new(),
     }
 }
 
 fn empty_hint(text: &'static str) -> gpui::Div {
     div()
-        .px_3()
-        .py_2()
-        .text_color(rgb(MUTED_FG))
+        .px_2()
+        .py_1()
+        .text_color(rgb(MUTE))
         .child(SharedString::from(text))
 }
 
@@ -651,20 +717,17 @@ fn inspector(debugger: &Debugger, cx: &mut Context<Debugger>) -> impl IntoElemen
     let body = match debugger.state.selected_tool() {
         Some(tool) => inspector_body(debugger, tool, enabled, running, cx).into_any_element(),
         None => div()
-            .p_4()
-            .text_color(rgb(MUTED_FG))
-            .child(SharedString::from("Select a tool"))
+            .p_3()
+            .text_color(rgb(MUTE))
+            .child(SharedString::from("SELECT A TOOL"))
             .into_any_element(),
     };
 
-    div()
-        .flex()
-        .flex_col()
+    frame()
         .flex_1()
         .min_w_0()
-        .border_l_1()
-        .border_color(rgb(BORDER))
-        .child(section_title("Inspector"))
+        .shadow(hard_shadow())
+        .child(theme::bracket("[ INSPECT ]"))
         .child(body)
 }
 
@@ -680,9 +743,9 @@ fn inspector_body(
         tool.annotations.read_only_hint,
         tool.annotations.untrusted_content_hint,
     ) {
-        (Some(true), Some(true)) => "read-only, untrusted output",
-        (Some(true), _) => "read-only",
-        (_, Some(true)) => "untrusted output",
+        (Some(true), Some(true)) => "RO · UNTRUSTED OUTPUT",
+        (Some(true), _) => "RO",
+        (_, Some(true)) => "UNTRUSTED OUTPUT",
         _ => "",
     };
 
@@ -692,18 +755,14 @@ fn inspector_body(
         .flex_col()
         .flex_1()
         .min_h_0()
-        .p_4()
+        .p_3()
         .gap_3()
         .overflow_scroll()
-        .child(
-            div()
-                .text_color(rgb(FG))
-                .child(SharedString::from(tool.name.clone())),
-        )
+        .child(SharedString::from(tool.name.clone()))
         .when(!hint.is_empty(), |el| {
             el.child(
                 div()
-                    .text_color(rgb(MUTED_FG))
+                    .text_color(rgb(MUTE))
                     .child(SharedString::from(hint)),
             )
         })
@@ -712,7 +771,7 @@ fn inspector_body(
                 .flex()
                 .flex_col()
                 .gap_1()
-                .child(muted_label("Description"))
+                .child(muted_label("DESCRIPTION"))
                 .child(SharedString::from(tool.description.clone())),
         )
         .child(
@@ -721,12 +780,12 @@ fn inspector_body(
                 .flex_col()
                 .h(px(132.))
                 .gap_1()
-                .child(muted_label("Schema"))
+                .child(muted_label("SCHEMA"))
                 .child(code_view("schema-scroll", schema)),
         )
         .child(arguments_form(debugger, cx))
         .child(execute_button(enabled, running, cx))
-        .child(result_panel(debugger, &tool.name))
+        .child(result_panel(debugger, &tool.name, cx))
 }
 
 fn arguments_form(debugger: &Debugger, cx: &mut Context<Debugger>) -> gpui::Div {
@@ -734,13 +793,13 @@ fn arguments_form(debugger: &Debugger, cx: &mut Context<Debugger>) -> gpui::Div 
         .flex()
         .flex_col()
         .gap_1()
-        .child(muted_label("Arguments"));
+        .child(muted_label("ARGUMENTS"));
     match &debugger.form.spec {
         FormSpec::Primitive { fields } if fields.is_empty() => {
             body = body.child(
                 div()
-                    .text_color(rgb(MUTED_FG))
-                    .child(SharedString::from("No arguments")),
+                    .text_color(rgb(MUTE))
+                    .child(SharedString::from("NONE")),
             );
         }
         FormSpec::Primitive { .. } => {
@@ -762,11 +821,7 @@ fn arguments_form(debugger: &Debugger, cx: &mut Context<Debugger>) -> gpui::Div 
 }
 
 fn field_row(widget: &FormWidget, cx: &mut Context<Debugger>) -> gpui::Div {
-    let title = if widget.field.required {
-        format!("{} *", widget.field.name)
-    } else {
-        widget.field.name.clone()
-    };
+    let title = field_name(&widget.field.name, widget.field.required);
     let mut row = div()
         .flex()
         .flex_col()
@@ -791,16 +846,18 @@ fn field_row(widget: &FormWidget, cx: &mut Context<Debugger>) -> gpui::Div {
 
 fn bool_toggle(name: String, value: bool, cx: &mut Context<Debugger>) -> impl IntoElement {
     let id = SharedString::from(format!("bool-{name}"));
+    let label = if value { "[ TRUE ]" } else { "[ FALSE ]" };
     div()
         .id(id)
         .flex()
         .items_center()
-        .h(px(32.))
+        .h(px(ROW))
         .px_2()
-        .rounded_md()
         .border_1()
-        .border_color(rgb(BORDER))
-        .bg(rgb(MUTED))
+        .border_dashed()
+        .border_color(rgb(theme::RULE))
+        .when(value, |el| el.bg(rgb(INK)).text_color(rgb(PAPER)))
+        .when(!value, |el| el.bg(rgb(PAPER)).text_color(rgb(MUTE)))
         .cursor_pointer()
         .on_click(cx.listener(move |this, _, _, cx| {
             if let Some(widget) = this
@@ -813,55 +870,77 @@ fn bool_toggle(name: String, value: bool, cx: &mut Context<Debugger>) -> impl In
             }
             cx.notify();
         }))
-        .child(SharedString::from(if value { "true" } else { "false" }))
+        .child(SharedString::from(label))
 }
 
 fn execute_button(enabled: bool, running: bool, cx: &mut Context<Debugger>) -> impl IntoElement {
-    let label = if running { "Executing…" } else { "Execute" };
-    let bg = if enabled { ACCENT } else { MUTED };
+    let label = if running { "WORKING" } else { "↵ EXECUTE" };
     div()
         .id("execute")
         .flex()
         .items_center()
         .justify_center()
-        .h(px(32.))
-        .px_4()
-        .rounded_md()
-        .bg(rgb(bg))
-        .text_color(rgb(FG))
+        .h(px(ROW))
+        .px_3()
+        .border_1()
+        .border_color(rgb(INK))
         .when(enabled, |el| {
-            el.cursor_pointer()
+            el.bg(rgb(INK))
+                .text_color(rgb(PAPER))
+                .cursor_pointer()
                 .on_click(cx.listener(|this, _, _, cx| this.execute_selected(cx)))
+        })
+        .when(!enabled, |el| {
+            el.border_dashed()
+                .border_color(rgb(theme::RULE))
+                .text_color(rgb(MUTE))
         })
         .child(SharedString::from(label))
 }
 
-fn result_panel(debugger: &Debugger, tool_name: &str) -> gpui::Div {
+fn result_panel(
+    debugger: &Debugger,
+    tool_name: &str,
+    cx: &mut Context<Debugger>,
+) -> gpui::Div {
     let execution = debugger.state.last_execution_for(tool_name);
     let is_running = debugger.pending.as_ref().is_some_and(|pending| {
         execution
             .map(|item| item.id == pending.id)
             .unwrap_or(false)
     });
+    let can_copy = execution.is_some_and(|item| item.result.is_some() || item.error.is_some());
 
-    let panel = div()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(muted_label("Result"));
+    let panel = div().flex().flex_col().gap_1().child(
+        div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(muted_label("RESULT"))
+            .when(can_copy, |el| {
+                el.child(
+                    div()
+                        .id("copy-result")
+                        .cursor_pointer()
+                        .text_color(rgb(MUTE))
+                        .on_click(cx.listener(|this, _, _, cx| this.copy_last_result(cx)))
+                        .child(SharedString::from("[ COPY ]")),
+                )
+            }),
+    );
 
     if is_running {
         return panel.child(
             div()
-                .text_color(rgb(MUTED_FG))
-                .child(SharedString::from("Executing…")),
+                .text_color(rgb(MUTE))
+                .child(SharedString::from("WORKING")),
         );
     }
 
     match execution {
         Some(execution) if execution.error.is_some() => panel.child(
             div()
-                .text_color(rgb(ERROR))
+                .text_color(rgb(RUST))
                 .child(SharedString::from(execution.error.clone().unwrap())),
         ),
         Some(execution) if execution.result.is_some() => {
@@ -872,7 +951,7 @@ fn result_panel(debugger: &Debugger, tool_name: &str) -> gpui::Div {
             panel
                 .child(
                     div()
-                        .text_color(rgb(MUTED_FG))
+                        .text_color(rgb(MUTE))
                         .child(SharedString::from(duration)),
                 )
                 .child(code_view(
@@ -882,8 +961,8 @@ fn result_panel(debugger: &Debugger, tool_name: &str) -> gpui::Div {
         }
         _ => panel.child(
             div()
-                .text_color(rgb(MUTED_FG))
-                .child(SharedString::from("No result yet")),
+                .text_color(rgb(MUTE))
+                .child(SharedString::from("NONE")),
         ),
     }
 }
@@ -899,11 +978,13 @@ fn code_view(id: &'static str, body: String) -> impl IntoElement {
         .flex_col()
         .flex_1()
         .min_h_0()
-        .p_3()
-        .rounded_md()
-        .bg(rgb(MUTED))
+        .p_2()
+        .border_1()
+        .border_dashed()
+        .border_color(rgb(theme::RULE))
+        .bg(rgb(PAPER))
         .overflow_scroll()
-        .text_color(rgb(FG))
+        .text_color(rgb(INK))
         .children(
             body.lines()
                 .map(|line| div().child(SharedString::from(line.to_string()))),
@@ -911,14 +992,10 @@ fn code_view(id: &'static str, body: String) -> impl IntoElement {
 }
 
 fn event_log(state: &DebuggerState) -> impl IntoElement {
-    div()
+    frame()
         .h(px(168.))
-        .flex()
-        .flex_col()
-        .border_t_1()
-        .border_color(rgb(BORDER))
-        .bg(rgb(CARD))
-        .child(section_title("Event Log"))
+        .flex_shrink_0()
+        .child(theme::bracket("[ LOG ]"))
         .child(
             div()
                 .id("event-log-scroll")
@@ -926,25 +1003,45 @@ fn event_log(state: &DebuggerState) -> impl IntoElement {
                 .flex_col()
                 .flex_1()
                 .min_h_0()
-                .px_4()
-                .pb_3()
-                .gap_1()
+                .px_2()
+                .py_1()
                 .overflow_scroll()
                 .children({
                     let start = state.events.len().saturating_sub(20);
                     state.events[start..].iter().map(|event| {
-                    let line = format!(
-                        "{}  {}  {}",
-                        event.timestamp.format("%H:%M:%S"),
-                        event.kind.as_label(),
-                        event.message
-                    );
-                    div()
-                        .text_color(rgb(MUTED_FG))
-                        .child(SharedString::from(line))
+                        let line = format!(
+                            "{}  {}  {}",
+                            event.timestamp.format("%H:%M:%S"),
+                            kind_cell(event.kind.as_label()),
+                            event.message
+                        );
+                        let color = match event.kind {
+                            EventKind::ToolExecutionFailed | EventKind::Disconnected => RUST,
+                            EventKind::Hello
+                            | EventKind::PageChanged
+                            | EventKind::ToolsChanged
+                            | EventKind::ToolExecutionStarted
+                            | EventKind::ToolExecutionFinished => MUTE,
+                        };
+                        div()
+                            .text_color(rgb(color))
+                            .child(SharedString::from(line))
                     })
                 }),
         )
+}
+
+fn keymap_bar() -> impl IntoElement {
+    div()
+        .flex()
+        .items_center()
+        .gap_4()
+        .px_1()
+        .flex_shrink_0()
+        .text_color(rgb(MUTE))
+        .child(SharedString::from("⌘↵ EXECUTE"))
+        .child(SharedString::from("⌃T MODE"))
+        .child(SharedString::from("⌘⇧C COPY"))
 }
 
 fn column(
@@ -952,58 +1049,49 @@ fn column(
     width: gpui::Pixels,
     children: impl IntoIterator<Item = impl IntoElement>,
 ) -> gpui::Div {
-    div()
-        .flex()
-        .flex_col()
+    frame()
         .w(width)
         .flex_shrink_0()
-        .border_r_1()
-        .border_color(rgb(BORDER))
-        .child(section_title(title))
+        .child(theme::bracket(title))
         .child(
             div()
+                .id(SharedString::from(title))
                 .flex()
                 .flex_col()
                 .flex_1()
                 .min_h_0()
-                .p_2()
-                .gap_1()
+                .py_1()
+                .overflow_scroll()
                 .children(children),
         )
 }
 
-fn section_title(title: &'static str) -> impl IntoElement {
-    div()
-        .px_4()
-        .py_2()
-        .text_color(rgb(MUTED_FG))
-        .border_b_1()
-        .border_color(rgb(BORDER))
-        .child(SharedString::from(title))
-}
-
 fn muted_label(label: impl Into<SharedString>) -> impl IntoElement {
-    div()
-        .text_color(rgb(MUTED_FG))
-        .child(label.into())
+    div().text_color(rgb(MUTE)).child(label.into())
 }
 
 fn main() {
     Application::new().run(|cx: &mut App| {
         bind_text_input_keys(cx);
+        bind_debugger_keys(cx);
         let bounds = Bounds::centered(None, size(px(1200.), px(800.)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions {
-                    title: Some("WebMCP Debugger".into()),
+                    title: Some("WEBMCP".into()),
                     ..Default::default()
                 }),
                 ..Default::default()
             },
-            |_, cx| cx.new(Debugger::new),
+            |window, cx| {
+                let debugger = cx.new(Debugger::new);
+                window.focus(&debugger.read(cx).focus);
+                debugger
+            },
         )
         .unwrap();
         cx.activate(true);
     });
 }
+
