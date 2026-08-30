@@ -238,7 +238,10 @@ impl DebuggerState {
         finished_at: DateTime<Utc>,
     ) {
         let message = {
-            let Some(execution) = self.executions.iter_mut().find(|execution| &execution.id == id)
+            let Some(execution) = self
+                .executions
+                .iter_mut()
+                .find(|execution| &execution.id == id)
             else {
                 return;
             };
@@ -268,7 +271,10 @@ impl DebuggerState {
         finished_at: DateTime<Utc>,
     ) {
         let message = {
-            let Some(execution) = self.executions.iter_mut().find(|execution| &execution.id == id)
+            let Some(execution) = self
+                .executions
+                .iter_mut()
+                .find(|execution| &execution.id == id)
             else {
                 return;
             };
@@ -388,7 +394,10 @@ mod tests {
         assert_eq!(state.events[0].kind, EventKind::ToolExecutionStarted);
         assert_eq!(state.events[1].kind, EventKind::ToolExecutionFinished);
         assert_eq!(
-            state.last_execution_for("search_products").unwrap().duration_ms(),
+            state
+                .last_execution_for("search_products")
+                .unwrap()
+                .duration_ms(),
             Some(120)
         );
     }
