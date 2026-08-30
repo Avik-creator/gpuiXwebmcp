@@ -8,7 +8,7 @@ This is a local developer tool: it discovers page tools, lets you execute them m
 
 ## Phase 5 (current)
 
-The GPUI window listens on `ws://127.0.0.1:17321` (loopback only). The MV3 extension is a dumb bridge from `document.modelContext` to that socket. Execute in the inspector hits the real tab.
+The GPUI window listens on `ws://127.0.0.1:17321` (loopback only). The MV3 extension is a dumb bridge from `document.modelContext` to that socket. Paste a site URL in the header field and press GO (or Enter) to focus that tab or open it in Chrome. Execute in the inspector hits the real tab.
 
 Do **not** also run `cargo run -p debugger --bin ws-server`; that binary is only for Phase 4 CLI checks and will collide on the port.
 

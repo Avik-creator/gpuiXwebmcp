@@ -18,7 +18,8 @@ function GpuiPage() {
         <h2 className="text-xl font-medium text-foreground">What it is not</h2>
         <p>
           It is not a web browser. It does not load localhost:5173 inside
-          itself. It does not sandbox you. The binary runs as you, on your
+          itself. The SITE field in the header only tells Chrome which tab to
+          inspect. It does not sandbox you. The binary runs as you, on your
           machine, same as any other native app.
         </p>
         <p>

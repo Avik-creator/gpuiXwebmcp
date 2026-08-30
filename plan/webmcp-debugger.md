@@ -65,7 +65,7 @@ The UI only talks to `DebuggerState` plus a `ToolBackend`. Phase 1–2 use `Fixt
 
 Events (browser → debugger): `hello`, `page_changed`, `tools_changed`, `tool_execution_started`, `tool_execution_finished`, `tool_execution_failed`, `disconnected`.
 
-Commands (debugger → browser): `subscribe_page`, `execute_tool`.
+Commands (debugger → browser): `subscribe_page`, `execute_tool`, `open_page`.
 
 Core types stay close to the write-up (`Page`, `Tool`, `ToolExecution`, `DebuggerState`). Add `annotations` (`readOnlyHint`, `untrustedContentHint`) because Chrome already returns them. Store times as `chrono::DateTime<Utc>` in the protocol and `Instant` only for local duration math.
 

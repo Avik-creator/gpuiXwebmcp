@@ -16,14 +16,23 @@ export function DebuggerPreview() {
   return (
     <figure className="overflow-hidden rounded-xl border border-border bg-background shadow-[0_0_40px_rgba(15,23,42,0.8)]">
       <figcaption className="sr-only">
-        Mock of the WebMCP Debugger window: pages, tools, inspector, and event log.
+        Mock of the WebMCP Debugger window: site field, pages, tools, inspector, and event log.
       </figcaption>
-      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
-        <p className="text-sm">WebMCP Debugger</p>
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="size-2 rounded-full bg-accent" aria-hidden="true" />
-          Fixture
-        </p>
+      <div className="border-b border-border bg-card">
+        <div className="flex items-center justify-between px-4 py-3">
+          <p className="text-sm">WebMCP Debugger</p>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="size-2 rounded-full bg-accent" aria-hidden="true" />
+            Fixture
+          </p>
+        </div>
+        <div className="flex items-center gap-2 border-t border-border px-4 py-2">
+          <p className="text-sm text-muted-foreground">SITE</p>
+          <p className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm">
+            http://localhost:5173
+          </p>
+          <p className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent">GO</p>
+        </div>
       </div>
       <div className="grid min-h-[22rem] grid-cols-1 md:grid-cols-[11rem_13rem_1fr]">
         <section className="border-b border-border md:border-b-0 md:border-r" aria-label="Pages">
