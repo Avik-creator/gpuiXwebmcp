@@ -107,9 +107,99 @@ async function handleCommand(command) {
       await executeOnTab(command);
       return;
     }
+    case "open_page": {
+      await openPage(command.url);
+      return;
+    }
     default:
       return;
   }
+}
+
+function normalizeInspectUrl(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed || /[\s\u0000-\u001f]/.test(trimmed)) {
+    return null;
+  }
+  const lower = trimmed.toLowerCase();
+  const blocked = [
+    "javascript:",
+    "data:",
+    "file:",
+    "vbscript:",
+    "blob:",
+    "chrome:",
+    "chrome-extension:",
+    "about:",
+    "view-source:",
+    "ws:",
+    "wss:",
+    "ftp:",
+  ];
+  if (blocked.some((scheme) => lower.startsWith(scheme))) {
+    return null;
+  }
+  let candidate = trimmed;
+  if (!trimmed.includes("://")) {
+    const hostport = trimmed.split(/[/?#]/)[0];
+    const host = hostport.includes("]")
+      ? hostport.slice(0, hostport.indexOf("]") + 1)
+      : hostport.replace(/:\d+$/, "");
+    const local = host.toLowerCase() === "localhost" || host === "127.0.0.1";
+    candidate = `${local ? "http" : "https"}://${trimmed}`;
+  }
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return null;
+  }
+  if (!parsed.hostname) {
+    return null;
+  }
+  return parsed.href;
+}
+
+async function openPage(rawUrl) {
+  const url = normalizeInspectUrl(rawUrl);
+  if (!url) {
+    return;
+  }
+  let origin = "";
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    return;
+  }
+  const tabs = await chrome.tabs.query({});
+  const exact = tabs.find((tab) => tab.id != null && tab.url === url);
+  const sameOrigin = tabs.find((tab) => {
+    if (tab.id == null || !tab.url) {
+      return false;
+    }
+    try {
+      return new URL(tab.url).origin === origin;
+    } catch {
+      return false;
+    }
+  });
+  const match = exact || sameOrigin;
+  if (match && match.id != null) {
+    await chrome.tabs.update(match.id, { active: true });
+    if (match.windowId != null) {
+      try {
+        await chrome.windows.update(match.windowId, { focused: true });
+      } catch {
+        // Focusing the window is optional; the tab is already active.
+      }
+    }
+    await requestTools(match.id);
+    return;
+  }
+  await chrome.tabs.create({ url });
 }
 
 async function executeOnTab(command) {
