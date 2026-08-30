@@ -9,8 +9,6 @@ Build a native GPUI WebMCP debugger as a developer tool: first a working four-pa
 - [x] Phase 3 — Demo site with `get_user`, `search_products`, `create_note`
 - [ ] Phase 4 — MV3 extension: `getTools` / `executeTool` / `ontoolchange` → WebSocket on `127.0.0.1` with `chrome-extension` Origin allowlist
 - [ ] Phase 5 — ChromeBridge: GPUI lists live tab tools and Execute returns real WebMCP results
-- [ ] Phase 4 — MV3 extension: `getTools` / `executeTool` / `ontoolchange` → WebSocket on `127.0.0.1` with `chrome-extension` Origin allowlist
-- [ ] Phase 5 — ChromeBridge: GPUI lists live tab tools and Execute returns real WebMCP results
 
 ## Product
 
@@ -206,50 +204,9 @@ Goal: generated form + in-process execute + event log updates.
 
 Done when clicking Execute on `search_products` with `query=gpui` shows `{ results: [...] }` without leaving the app.
 
-### Pickup — what landed vs what is still pending
+Verified in the GPUI window: `search_products` with a non-empty query returns the two fixture books (`Programming GPUI`, `WebMCP in Practice`) plus a duration; `get_user` and `create_note` also Execute. Event log records started/finished; it does not auto-scroll to the newest line.
 
-Code is on `main` but Phase 2 is **not done**: this machine could not compile GPUI, so Execute was never run in the window.
-
-**Already in the tree**
-
-- Protocol: `ToolExecution::duration_ms`, `DebuggerState::{last_execution_for, record_execution_started, record_execution_finished, record_execution_failed}`.
-- `FixtureBackend::execute` returns the demo JSON (`get_user` profile, `search_products` two books, `create_note` `{ ok, text }`). Latency is **not** inside `execute`; the GPUI layer waits 50–200ms on the background executor, then calls `execute`.
-- `crates/debugger/src/schema.rs` — object properties of `string` / `number` / `integer` / `boolean` plus `required`; anything else is a JSON textarea. Execute stays disabled until required fields are non-empty.
-- `crates/debugger/src/input.rs` — GPUI `TextInput` copied from the crates.io `gpui` 0.2.2 `examples/input.rs` (dark-theme styling).
-- Inspector: form + Execute + result JSON + duration; event log appends started / finished / failed.
-- Unit tests for protocol recording, schema parsing, and fixture JSON. `unicode-segmentation` is a workspace dep for the input widget.
-- `gpui_platform` + `font-kit` is **not** added: that crate is not on crates.io at 0.2.2. Phase 1 already rendered text with `gpui` alone.
-
-**Do this on the next machine**
-
-1. Xcode Metal toolchain (this is why compile died here):
-
-   ```sh
-   sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-   xcodebuild -runFirstLaunch
-   xcodebuild -downloadComponent MetalToolchain
-   ```
-
-   Confirm `xcrun metal -v` works. Then:
-
-   ```sh
-   cargo test --workspace
-   cargo run -p debugger
-   ```
-
-2. Manual check (the Phase 2 done criterion): select `search_products`, type `gpui`, click Execute. Inspector must show `{ "results": [ ... two books ... ] }` and a duration; event log must show `TOOL_EXECUTION_STARTED` then `TOOL_EXECUTION_FINISHED`. Also try `get_user` (no args, Execute enabled immediately) and `create_note` with empty `text` (Execute disabled).
-
-3. If that works, tick Phase 2 in Status above. Only then start Phase 3.
-
-**Known compile error on this machine**
-
-```text
-metal shader compilation failed:
-cannot execute tool 'metal' due to missing Metal Toolchain;
-use: xcodebuild -downloadComponent MetalToolchain
-```
-
-A download of that component was started here (~688 MB) and may still be running; do not assume it finished. Re-run the download on the next Mac if `xcrun metal` still fails.
+`.cargo/config.toml` points `DEVELOPER_DIR` at Xcode so Metal shader compile works. `gpui_platform` is not a crates.io crate at 0.2.2; GPUI 0.2.2 alone is enough.
 
 ## Phase 3 — Demo site (Chrome, no our extension yet)
 
