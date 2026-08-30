@@ -15,7 +15,7 @@ use std::time::Duration;
 use serde_json::Value;
 use tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tungstenite::{Message, accept_hdr};
-use webmcp_protocol::{WS_HOST, WS_PORT};
+use webmcp_protocol::{BrowserEvent, DebuggerCommand, WS_HOST, WS_PORT};
 
 /// Stable unpacked extension id (from `extension/manifest.json` `key`).
 pub const EXTENSION_ID: &str = "ffaihbpimepkgggjclheahfddigmmfeg";
@@ -41,7 +41,63 @@ pub fn serve() -> std::io::Result<()> {
     eprintln!("ws-server listening on ws://{WS_HOST}:{WS_PORT}");
     eprintln!("allowed Origin: {}", allowed_extension_origin());
 
-    let hub = Hub::new();
+    let hub = Hub::new(None, true);
+    accept_loop(listener, hub)
+}
+
+/// In-process bridge: the GPUI app owns the listener and talks to the
+/// extension over channels, so it never needs a chrome-extension Origin.
+pub struct ChromeBridge {
+    hub: Arc<Hub>,
+    incoming: Receiver<BridgeEvent>,
+}
+
+#[derive(Debug)]
+pub enum BridgeEvent {
+    ClientsChanged { connected: usize },
+    Browser(BrowserEvent),
+}
+
+impl ChromeBridge {
+    pub fn bind() -> std::io::Result<Self> {
+        let listener = TcpListener::bind(listen_addr())?;
+        eprintln!("debugger listening on ws://{WS_HOST}:{WS_PORT}");
+        eprintln!("allowed Origin: {}", allowed_extension_origin());
+        let (tx, rx) = mpsc::channel();
+        let hub = Hub::new(Some(tx), false);
+        let accept_hub = Arc::clone(&hub);
+        thread::spawn(move || {
+            if let Err(error) = accept_loop(listener, accept_hub) {
+                eprintln!("ws accept loop ended: {error}");
+            }
+        });
+        Ok(Self {
+            hub,
+            incoming: rx,
+        })
+    }
+
+    pub fn poll(&self) -> Vec<BridgeEvent> {
+        let mut events = Vec::new();
+        while let Ok(event) = self.incoming.try_recv() {
+            events.push(event);
+        }
+        events
+    }
+
+    pub fn send(&self, command: &DebuggerCommand) -> bool {
+        let Ok(text) = serde_json::to_string(command) else {
+            return false;
+        };
+        self.hub.send_all(&text) > 0
+    }
+
+    pub fn client_count(&self) -> usize {
+        self.hub.client_count()
+    }
+}
+
+fn accept_loop(listener: TcpListener, hub: Arc<Hub>) -> std::io::Result<()> {
     for incoming in listener.incoming() {
         match incoming {
             Ok(stream) => {
@@ -62,24 +118,56 @@ pub fn serve() -> std::io::Result<()> {
 struct Hub {
     next_id: AtomicUsize,
     clients: Mutex<HashMap<usize, Sender<String>>>,
+    ui_tx: Option<Sender<BridgeEvent>>,
+    log_stdout: bool,
 }
 
 impl Hub {
-    fn new() -> Arc<Self> {
+    fn new(ui_tx: Option<Sender<BridgeEvent>>, log_stdout: bool) -> Arc<Self> {
         Arc::new(Self {
             next_id: AtomicUsize::new(1),
             clients: Mutex::new(HashMap::new()),
+            ui_tx,
+            log_stdout,
         })
+    }
+
+    fn emit(&self, event: BridgeEvent) {
+        if let Some(tx) = &self.ui_tx {
+            let _ = tx.send(event);
+        }
     }
 
     fn register(&self, tx: Sender<String>) -> usize {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.clients.lock().expect("hub lock").insert(id, tx);
+        let connected = {
+            let mut clients = self.clients.lock().expect("hub lock");
+            clients.insert(id, tx);
+            clients.len()
+        };
+        self.emit(BridgeEvent::ClientsChanged { connected });
         id
     }
 
     fn unregister(&self, id: usize) {
-        self.clients.lock().expect("hub lock").remove(&id);
+        let connected = {
+            let mut clients = self.clients.lock().expect("hub lock");
+            clients.remove(&id);
+            clients.len()
+        };
+        self.emit(BridgeEvent::ClientsChanged { connected });
+    }
+
+    fn client_count(&self) -> usize {
+        self.clients.lock().expect("hub lock").len()
+    }
+
+    fn send_all(&self, text: &str) -> usize {
+        let clients = self.clients.lock().expect("hub lock");
+        for tx in clients.values() {
+            let _ = tx.send(text.to_string());
+        }
+        clients.len()
     }
 
     fn broadcast(&self, from: usize, text: &str) {
@@ -124,8 +212,13 @@ fn handle_connection(stream: TcpStream, hub: Arc<Hub>) -> Result<(), Box<dyn std
             Ok(Message::Text(text)) => {
                 let text = text.to_string();
                 if is_protocol_message(&text) {
-                    println!("{text}");
+                    if hub.log_stdout {
+                        println!("{text}");
+                    }
                     hub.broadcast(id, &text);
+                    if let Ok(event) = serde_json::from_str::<BrowserEvent>(&text) {
+                        hub.emit(BridgeEvent::Browser(event));
+                    }
                 } else {
                     eprintln!("client {id} sent non-protocol message, dropping");
                 }

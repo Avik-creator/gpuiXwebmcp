@@ -6,12 +6,16 @@ use gpui::{
     WindowOptions, div, prelude::*, px, rgb, size,
 };
 use serde_json::{Map, Value, json};
-use webmcp_protocol::{DebuggerState, ExecutionId, Page, PageId, Tool, ToolExecution};
+use webmcp_protocol::{
+    BrowserEvent, ConnectionStatus, DebuggerCommand, DebuggerState, EventKind, ExecutionId,
+    LogEvent, Page, PageId, Tool, ToolExecution,
+};
 
 mod fixture;
 mod input;
 mod schema;
 
+use debugger::ws::{BridgeEvent, ChromeBridge};
 use fixture::{FixtureBackend, ToolBackend};
 use input::{TextInput, bind_text_input_keys};
 use schema::{
@@ -28,6 +32,14 @@ const MUTED_FG: u32 = 0x94_A3_B8;
 const ACCENT: u32 = 0x22_C5_5E;
 const SELECTED: u32 = 0x33_41_55;
 const ERROR: u32 = 0xF8_71_71;
+const EXECUTE_TIMEOUT: Duration = Duration::from_secs(15);
+const BRIDGE_POLL: Duration = Duration::from_millis(50);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BackendKind {
+    Fixture,
+    Live,
+}
 
 struct FormWidget {
     field: FormField,
@@ -60,22 +72,144 @@ struct Debugger {
     form: ToolForm,
     pending: Option<PendingExecution>,
     execution_seq: u64,
+    backend: BackendKind,
+    bridge: Option<ChromeBridge>,
+    extension_clients: usize,
 }
 
 impl Debugger {
     fn new(cx: &mut Context<Self>) -> Self {
+        let (bridge, bind_error) = match ChromeBridge::bind() {
+            Ok(bridge) => (Some(bridge), None),
+            Err(error) => (None, Some(error.to_string())),
+        };
         let mut this = Self {
-            state: FixtureBackend.snapshot(),
+            state: DebuggerState::waiting_for_extension(),
             form: ToolForm::empty(),
             pending: None,
             execution_seq: 0,
+            backend: BackendKind::Live,
+            bridge,
+            extension_clients: 0,
         };
+        if let Some(error) = bind_error {
+            this.state.events.push(LogEvent {
+                timestamp: Utc::now(),
+                kind: EventKind::Disconnected,
+                message: format!("ws bind failed: {error}"),
+            });
+        }
         this.rebuild_form(cx);
+        this.start_bridge_pump(cx);
         this
     }
 
+    fn start_bridge_pump(&self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, async_cx| {
+            loop {
+                async_cx.background_executor().timer(BRIDGE_POLL).await;
+                if this
+                    .update(async_cx, |this, cx| this.drain_bridge(cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn drain_bridge(&mut self, cx: &mut Context<Self>) {
+        let Some(bridge) = &self.bridge else {
+            return;
+        };
+        let events = bridge.poll();
+        if events.is_empty() {
+            return;
+        }
+        let mut rebuild = false;
+        let mut clear_pending = false;
+        for event in events {
+            match event {
+                BridgeEvent::ClientsChanged { connected } => {
+                    self.extension_clients = connected;
+                    if self.backend == BackendKind::Live
+                        && connected == 0
+                        && self.state.connection != ConnectionStatus::Disconnected
+                    {
+                        let _ = self.state.apply_browser_event(BrowserEvent::Disconnected {
+                            timestamp: Utc::now(),
+                        });
+                    }
+                }
+                BridgeEvent::Browser(browser) => {
+                    if self.backend != BackendKind::Live {
+                        continue;
+                    }
+                    let finishes_pending = match &browser {
+                        BrowserEvent::ToolExecutionFinished { execution_id, .. }
+                        | BrowserEvent::ToolExecutionFailed { execution_id, .. } => self
+                            .pending
+                            .as_ref()
+                            .is_some_and(|pending| pending.id == *execution_id),
+                        BrowserEvent::Hello { .. }
+                        | BrowserEvent::PageChanged { .. }
+                        | BrowserEvent::ToolsChanged { .. }
+                        | BrowserEvent::ToolExecutionStarted { .. }
+                        | BrowserEvent::Disconnected { .. } => false,
+                    };
+                    if self.state.apply_browser_event(browser) {
+                        rebuild = true;
+                    }
+                    if finishes_pending {
+                        clear_pending = true;
+                    }
+                }
+            }
+        }
+        if clear_pending {
+            self.pending = None;
+        }
+        if rebuild {
+            self.rebuild_form(cx);
+        }
+        cx.notify();
+    }
+
+    fn toggle_backend(&mut self, cx: &mut Context<Self>) {
+        match self.backend {
+            BackendKind::Fixture => {
+                self.backend = BackendKind::Live;
+                self.pending = None;
+                self.state = DebuggerState::waiting_for_extension();
+                if self.extension_clients > 0 {
+                    self.state.connection = ConnectionStatus::Connected;
+                }
+                self.rebuild_form(cx);
+            }
+            BackendKind::Live => {
+                self.backend = BackendKind::Fixture;
+                self.pending = None;
+                self.state = FixtureBackend.snapshot();
+                self.rebuild_form(cx);
+            }
+        }
+        cx.notify();
+    }
+
     fn select_page(&mut self, id: PageId, cx: &mut Context<Self>) {
-        self.state.selected_page = Some(id);
+        if self.state.selected_page.as_ref() == Some(&id) {
+            return;
+        }
+        self.state.selected_page = Some(id.clone());
+        if self.backend == BackendKind::Live {
+            self.state.tools.clear();
+            self.state.selected_tool = None;
+            self.rebuild_form(cx);
+            if let Some(bridge) = &self.bridge {
+                let _ = bridge.send(&DebuggerCommand::SubscribePage { page_id: id });
+            }
+        }
         cx.notify();
     }
 
@@ -177,6 +311,11 @@ impl Debugger {
         if self.pending.is_some() || self.state.selected_tool.is_none() {
             return false;
         }
+        if self.backend == BackendKind::Live
+            && self.state.connection != ConnectionStatus::Connected
+        {
+            return false;
+        }
         match &self.form.spec {
             FormSpec::Primitive { .. } => {
                 required_fields_filled(&self.form.spec, &self.form_string_values(cx), "")
@@ -228,17 +367,57 @@ impl Debugger {
             finished_at: None,
         });
         self.pending = Some(PendingExecution { id: id.clone() });
-        let delay = fixture_delay();
         cx.notify();
-        cx.spawn(async move |this, async_cx| {
-            async_cx.background_executor().timer(delay).await;
-            let result = FixtureBackend.execute(&tool, &arguments);
-            this.update(async_cx, |this, cx| {
-                this.complete_execution(id, result, cx);
-            })
-            .ok();
-        })
-        .detach();
+        match self.backend {
+            BackendKind::Fixture => {
+                let delay = fixture_delay();
+                cx.spawn(async move |this, async_cx| {
+                    async_cx.background_executor().timer(delay).await;
+                    let result = FixtureBackend.execute(&tool, &arguments);
+                    this.update(async_cx, |this, cx| {
+                        this.complete_execution(id, result, cx);
+                    })
+                    .ok();
+                })
+                .detach();
+            }
+            BackendKind::Live => {
+                let Some(page_id) = self.state.selected_page.clone() else {
+                    self.complete_execution(id, Err("no page selected".to_string()), cx);
+                    return;
+                };
+                let sent = self.bridge.as_ref().is_some_and(|bridge| {
+                    bridge.send(&DebuggerCommand::ExecuteTool {
+                        page_id,
+                        tool,
+                        arguments,
+                        execution_id: id.clone(),
+                    })
+                });
+                if !sent {
+                    self.complete_execution(
+                        id,
+                        Err("extension not connected".to_string()),
+                        cx,
+                    );
+                    return;
+                }
+                cx.spawn(async move |this, async_cx| {
+                    async_cx.background_executor().timer(EXECUTE_TIMEOUT).await;
+                    this.update(async_cx, |this, cx| {
+                        if this.pending.as_ref().is_some_and(|pending| pending.id == id) {
+                            this.complete_execution(
+                                id,
+                                Err("timed out waiting for Chrome".to_string()),
+                                cx,
+                            );
+                        }
+                    })
+                    .ok();
+                })
+                .detach();
+            }
+        }
     }
 
     fn complete_execution(
@@ -282,7 +461,7 @@ impl Render for Debugger {
             .bg(rgb(BG))
             .text_color(rgb(FG))
             .text_sm()
-            .child(header(&self.state))
+            .child(header(self, cx))
             .child(
                 div()
                     .flex()
@@ -296,7 +475,17 @@ impl Render for Debugger {
     }
 }
 
-fn header(state: &DebuggerState) -> impl IntoElement {
+fn header(debugger: &Debugger, cx: &mut Context<Debugger>) -> impl IntoElement {
+    let origin = debugger
+        .state
+        .selected_page()
+        .map(|page| page.origin.clone())
+        .unwrap_or_else(|| "no page".to_string());
+    let status = debugger.state.connection;
+    let dot = match status {
+        ConnectionStatus::Fixture | ConnectionStatus::Connected => ACCENT,
+        ConnectionStatus::Disconnected => ERROR,
+    };
     div()
         .flex()
         .items_center()
@@ -308,24 +497,37 @@ fn header(state: &DebuggerState) -> impl IntoElement {
         .bg(rgb(CARD))
         .child(
             div()
-                .text_color(rgb(FG))
-                .child(SharedString::from("WebMCP Debugger")),
-        )
-        .child(
-            div()
                 .flex()
                 .items_center()
-                .gap_2()
-                .child(div().size(px(8.)).rounded_full().bg(rgb(ACCENT)))
+                .gap_3()
+                .child(SharedString::from("WebMCP Debugger"))
                 .child(
                     div()
                         .text_color(rgb(MUTED_FG))
-                        .child(SharedString::from(state.connection.as_label())),
+                        .child(SharedString::from(origin)),
+                ),
+        )
+        .child(
+            div()
+                .id("connection-status")
+                .flex()
+                .items_center()
+                .gap_2()
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_backend(cx)))
+                .child(div().size(px(8.)).rounded_full().bg(rgb(dot)))
+                .child(
+                    div()
+                        .text_color(rgb(MUTED_FG))
+                        .child(SharedString::from(status.as_label())),
                 ),
         )
 }
 
 fn page_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
+    if state.pages.is_empty() {
+        return column("Pages", px(220.), std::iter::once(empty_hint("No pages")));
+    }
     let selected = state.selected_page.clone();
     column(
         "Pages",
@@ -376,6 +578,9 @@ fn page_row(page: &Page, selected: bool) -> gpui::Div {
 }
 
 fn tool_list(state: &DebuggerState, cx: &mut Context<Debugger>) -> gpui::Div {
+    if state.tools.is_empty() {
+        return column("Tools", px(260.), std::iter::once(empty_hint("No tools")));
+    }
     let selected = state.selected_tool.clone();
     column(
         "Tools",
@@ -411,6 +616,33 @@ fn tool_row(tool: &Tool, selected: bool) -> gpui::Div {
                 .text_color(rgb(MUTED_FG))
                 .child(SharedString::from(label)),
         )
+        .when_some(annotation_badge(tool), |el, badge| {
+            el.child(
+                div()
+                    .text_color(rgb(MUTED_FG))
+                    .child(SharedString::from(badge)),
+            )
+        })
+}
+
+fn annotation_badge(tool: &Tool) -> Option<String> {
+    match (
+        tool.annotations.read_only_hint,
+        tool.annotations.untrusted_content_hint,
+    ) {
+        (Some(true), Some(true)) => Some("read-only · untrusted".to_string()),
+        (Some(true), _) => Some("read-only".to_string()),
+        (_, Some(true)) => Some("untrusted".to_string()),
+        _ => None,
+    }
+}
+
+fn empty_hint(text: &'static str) -> gpui::Div {
+    div()
+        .px_3()
+        .py_2()
+        .text_color(rgb(MUTED_FG))
+        .child(SharedString::from(text))
 }
 
 fn inspector(debugger: &Debugger, cx: &mut Context<Debugger>) -> impl IntoElement {
@@ -698,7 +930,9 @@ fn event_log(state: &DebuggerState) -> impl IntoElement {
                 .pb_3()
                 .gap_1()
                 .overflow_scroll()
-                .children(state.events.iter().map(|event| {
+                .children({
+                    let start = state.events.len().saturating_sub(20);
+                    state.events[start..].iter().map(|event| {
                     let line = format!(
                         "{}  {}  {}",
                         event.timestamp.format("%H:%M:%S"),
@@ -708,7 +942,8 @@ fn event_log(state: &DebuggerState) -> impl IntoElement {
                     div()
                         .text_color(rgb(MUTED_FG))
                         .child(SharedString::from(line))
-                })),
+                    })
+                }),
         )
 }
 
