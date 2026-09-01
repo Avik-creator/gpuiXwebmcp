@@ -94,17 +94,20 @@ impl DebuggerState {
                 false
             }
             BrowserEvent::PageChanged { page, timestamp } => {
+                let unchanged = self.pages.iter().any(|existing| existing == &page);
                 let id = page.id.clone();
                 let message = page.url.clone();
                 self.upsert_page(page);
                 if self.selected_page.is_none() {
                     self.selected_page = Some(id);
                 }
-                self.events.push(LogEvent {
-                    timestamp,
-                    kind: EventKind::PageChanged,
-                    message,
-                });
+                if !unchanged {
+                    self.events.push(LogEvent {
+                        timestamp,
+                        kind: EventKind::PageChanged,
+                        message,
+                    });
+                }
                 false
             }
             BrowserEvent::ToolsChanged {
@@ -135,14 +138,17 @@ impl DebuggerState {
                     Some(selected) if selected == &page_id => true,
                     Some(_) => false,
                 };
+                if !apply_tools {
+                    return false;
+                }
+                if self.tools == tools {
+                    return false;
+                }
                 self.events.push(LogEvent {
                     timestamp,
                     kind: EventKind::ToolsChanged,
                     message: format!("discovered {count} tools"),
                 });
-                if !apply_tools {
-                    return false;
-                }
                 self.tools = tools;
                 if !self
                     .selected_tool
@@ -521,5 +527,66 @@ mod tests {
             state.last_execution_for("search_products").unwrap().result,
             Some(result)
         );
+    }
+
+    fn sample_tool(name: &str) -> Tool {
+        Tool {
+            name: name.into(),
+            title: None,
+            description: name.into(),
+            input_schema: serde_json::json!({"type": "object"}),
+            annotations: crate::types::ToolAnnotations::default(),
+        }
+    }
+
+    #[test]
+    fn duplicate_page_changed_does_not_log_again() {
+        let mut state = DebuggerState::waiting_for_extension();
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 30, 18, 40, 0).unwrap();
+        let page = crate::types::Page {
+            id: crate::ids::PageId::from("tab:1"),
+            url: "http://localhost:5173/".into(),
+            title: "demo".into(),
+            origin: "http://localhost:5173".into(),
+        };
+        state.apply_browser_event(BrowserEvent::PageChanged {
+            page: page.clone(),
+            timestamp,
+        });
+        state.apply_browser_event(BrowserEvent::PageChanged { page, timestamp });
+        let pages = state
+            .events
+            .iter()
+            .filter(|event| event.kind == EventKind::PageChanged)
+            .count();
+        assert_eq!(pages, 1);
+    }
+
+    #[test]
+    fn duplicate_tools_changed_does_not_log_or_rebuild() {
+        let mut state = DebuggerState::waiting_for_extension();
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 30, 18, 41, 0).unwrap();
+        let page_id = crate::ids::PageId::from("tab:1");
+        let tools = vec![sample_tool("get_user")];
+        assert!(state.apply_browser_event(BrowserEvent::ToolsChanged {
+            page_id: page_id.clone(),
+            origin: "http://localhost:5173".into(),
+            url: "http://localhost:5173/".into(),
+            tools: tools.clone(),
+            timestamp,
+        }));
+        assert!(!state.apply_browser_event(BrowserEvent::ToolsChanged {
+            page_id,
+            origin: "http://localhost:5173".into(),
+            url: "http://localhost:5173/".into(),
+            tools,
+            timestamp,
+        }));
+        let discovered = state
+            .events
+            .iter()
+            .filter(|event| event.kind == EventKind::ToolsChanged)
+            .count();
+        assert_eq!(discovered, 1);
     }
 }

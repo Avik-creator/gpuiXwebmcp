@@ -28,9 +28,9 @@ python3 -m http.server 5173 --bind 127.0.0.1 --directory demo-site
 cargo run -p debugger
 ```
 
-5. Open [http://localhost:5173/](http://localhost:5173/). The status pill should read **Connected**, the page origin should be visible, and Execute on `search_products` should return the same two books as Fixture mode.
+5. Open [http://localhost:5173/](http://localhost:5173/). The status pill should read **CHROME**, the page origin should be visible, and Execute on `search_products` should return the same two books as Demo mode.
 
-Click the status pill to toggle **Fixture** (in-process demo, no Chrome) vs live Chrome.
+Click the status pill to toggle **Demo** (in-process tools, no Chrome) vs **Chrome**.
 
 See [plan/webmcp-debugger.md](plan/webmcp-debugger.md).
 

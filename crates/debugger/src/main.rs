@@ -273,8 +273,9 @@ impl Debugger {
         if let Some(page) = find_page_for_url(&self.state.pages, &url).cloned() {
             self.pending_site = None;
             self.push_log(EventKind::PageChanged, format!("selected {}", page.url));
-            self.select_page(page.id, cx);
-            if self.backend == BackendKind::Live {
+            let ask_chrome = self.backend == BackendKind::Live;
+            self.set_selected_page(page.id, !ask_chrome, cx);
+            if ask_chrome {
                 if let Some(bridge) = &self.bridge {
                     let _ = bridge.send(&DebuggerCommand::OpenPage { url });
                 }
@@ -322,6 +323,10 @@ impl Debugger {
     }
 
     fn select_page(&mut self, id: PageId, cx: &mut Context<Self>) {
+        self.set_selected_page(id, true, cx);
+    }
+
+    fn set_selected_page(&mut self, id: PageId, subscribe: bool, cx: &mut Context<Self>) {
         if self.state.selected_page.as_ref() == Some(&id) {
             return;
         }
@@ -330,8 +335,10 @@ impl Debugger {
             self.state.tools.clear();
             self.state.selected_tool = None;
             self.rebuild_form(cx);
-            if let Some(bridge) = &self.bridge {
-                let _ = bridge.send(&DebuggerCommand::SubscribePage { page_id: id });
+            if subscribe {
+                if let Some(bridge) = &self.bridge {
+                    let _ = bridge.send(&DebuggerCommand::SubscribePage { page_id: id });
+                }
             }
         }
         cx.notify();
@@ -719,12 +726,12 @@ fn header(debugger: &Debugger, cx: &mut Context<Debugger>) -> impl IntoElement {
 
 fn status_tag(debugger: &Debugger) -> (String, bool) {
     match debugger.backend {
-        BackendKind::Fixture => ("[ FIXTURE ]".into(), false),
+        BackendKind::Fixture => ("[ DEMO ]".into(), false),
         BackendKind::Live => match debugger.state.connection {
-            ConnectionStatus::Connected => {
-                (format!("[ LIVE · {} ]", debugger.extension_clients), false)
+            ConnectionStatus::Connected => ("[ CHROME ]".into(), false),
+            ConnectionStatus::Disconnected | ConnectionStatus::Fixture => {
+                ("[ NO EXTENSION ]".into(), true)
             }
-            ConnectionStatus::Disconnected | ConnectionStatus::Fixture => ("[ WAIT ]".into(), true),
         },
     }
 }
@@ -1195,7 +1202,7 @@ fn keymap_bar() -> impl IntoElement {
         .text_color(rgb(MUTE))
         .child(SharedString::from("⌘↵ EXECUTE"))
         .child(SharedString::from("↵ OPEN SITE"))
-        .child(SharedString::from("⌃T MODE"))
+        .child(SharedString::from("⌃T DEMO"))
         .child(SharedString::from("⌘⇧C COPY"))
 }
 

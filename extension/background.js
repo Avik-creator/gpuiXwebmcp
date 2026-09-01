@@ -25,12 +25,19 @@ function sendEvent(event) {
   socket.send(JSON.stringify(event));
 }
 
-async function requestTools(tabId) {
-  try {
-    await chrome.tabs.sendMessage(tabId, { action: "LIST_TOOLS" });
-  } catch {
-    // Content script may not be injected yet (chrome://, crashed tab, etc).
+const listTimers = new Map();
+const LIST_DEBOUNCE_MS = 200;
+
+function requestTools(tabId) {
+  const previous = listTimers.get(tabId);
+  if (previous) {
+    clearTimeout(previous);
   }
+  const timer = setTimeout(() => {
+    listTimers.delete(tabId);
+    chrome.tabs.sendMessage(tabId, { action: "LIST_TOOLS" }).catch(() => {});
+  }, LIST_DEBOUNCE_MS);
+  listTimers.set(tabId, timer);
 }
 
 async function emitActiveTab() {
@@ -38,7 +45,7 @@ async function emitActiveTab() {
   if (!tab || tab.id == null) {
     return;
   }
-  await requestTools(tab.id);
+  requestTools(tab.id);
 }
 
 function connect() {
@@ -99,7 +106,7 @@ async function handleCommand(command) {
     case "subscribe_page": {
       const tabId = parseTabId(command.page_id);
       if (tabId != null) {
-        await requestTools(tabId);
+        requestTools(tabId);
       }
       return;
     }
@@ -188,6 +195,11 @@ async function openPage(rawUrl) {
   });
   const match = exact || sameOrigin;
   if (match && match.id != null) {
+    const [active] = await chrome.tabs.query({
+      active: true,
+      lastFocusedWindow: true,
+    });
+    const alreadyActive = active && active.id === match.id;
     await chrome.tabs.update(match.id, { active: true });
     if (match.windowId != null) {
       try {
@@ -196,7 +208,9 @@ async function openPage(rawUrl) {
         // Focusing the window is optional; the tab is already active.
       }
     }
-    await requestTools(match.id);
+    if (alreadyActive) {
+      requestTools(match.id);
+    }
     return;
   }
   await chrome.tabs.create({ url });
@@ -313,12 +327,12 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 });
 
 chrome.tabs.onActivated.addListener((info) => {
-  requestTools(info.tabId).catch(() => {});
+  requestTools(info.tabId);
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "complete") {
-    requestTools(tabId).catch(() => {});
+    requestTools(tabId);
   }
 });
 
