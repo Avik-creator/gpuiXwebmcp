@@ -12,18 +12,18 @@ Build a native GPUI WebMCP debugger as a developer tool: first a working four-pa
 
 ### V2 — three places instead of four panels
 
-The four-panel layout is retired. Survey, Compose and Record are named in the bar
-on every screen; Running, Result and Failed are states Compose morphs through
-rather than destinations. See `design/` for the canvas this was built from.
+The four-panel layout is retired. Tools, Run and History are named in the bar on
+every screen; running, result and failure are states Run passes through rather
+than destinations.
 
 - [x] Bridge reliability — the unregister leak, late results recorded rather than dropped, bounded history
 - [x] Repo hygiene — prerequisites, LICENSE, site palette
 - [x] Design foundation — five tokens, two palettes, contrast enforced by test
-- [x] Shell and routing — the bar is the router
+- [x] Shell and routing — the bar is the router, with back and forward
 - [x] Schema engine — full JSON Schema, per-field fallback
-- [x] Survey and Record
-- [x] Compose and its states
-- [x] Command palette
+- [x] Tools and History
+- [x] Run and its states
+- [x] Command palette, and a playground that serves its own demo site
 - [x] Extension plumbing — cancel, per-page tool cache, single-client routing
 
 ## Product
@@ -191,7 +191,6 @@ gpuiXwebmcp/
   demo-site/                 vanilla HTML/JS, 3 tools
   site/                      TanStack Router explainer (not shipped with the app)
   scripts/                   watch_bridge.py — CLI WS client that forges the extension Origin
-  design/                    V2 design canvas sources (.dc.html artboards)
   plan/                      this document
 ```
 
