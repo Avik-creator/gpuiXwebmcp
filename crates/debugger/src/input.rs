@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{
-    actions, div, fill, point, prelude::*, px, relative, rgb, rgba, size, App, Bounds,
+    actions, div, fill, point, prelude::*, px, relative, rgb, size, App, Bounds,
     ClipboardItem, Context, CursorStyle, ElementId, ElementInputHandler, Entity,
     EntityInputHandler, EventEmitter, FocusHandle, Focusable, GlobalElementId, KeyBinding,
     LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
@@ -9,7 +9,51 @@ use gpui::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::theme::{INK, MUTE, PAPER, ROW, RULE};
+use super::theme;
+
+fn is_word(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '_'
+}
+
+/// Start of the word before `from`, skipping any run of separators first.
+/// Free functions so the boundary rules can be tested without a window.
+pub fn word_start(text: &str, from: usize) -> usize {
+    let mut at = from.min(text.len());
+    while at > 0 && !text.is_char_boundary(at) {
+        at -= 1;
+    }
+    let mut chars: Vec<(usize, char)> = text[..at].char_indices().collect();
+    while chars.last().is_some_and(|&(_, ch)| !is_word(ch)) {
+        chars.pop();
+    }
+    while let Some(&(index, ch)) = chars.last() {
+        if !is_word(ch) {
+            return index + ch.len_utf8();
+        }
+        chars.pop();
+        if chars.is_empty() {
+            return index;
+        }
+    }
+    0
+}
+
+/// End of the word after `from`, skipping any run of separators first.
+pub fn word_end(text: &str, from: usize) -> usize {
+    let from = from.min(text.len());
+    let mut at = from;
+    let mut seen_word = false;
+    for (index, ch) in text[from..].char_indices() {
+        let absolute = from + index;
+        if is_word(ch) {
+            seen_word = true;
+        } else if seen_word {
+            return absolute;
+        }
+        at = absolute + ch.len_utf8();
+    }
+    at
+}
 
 actions!(
     text_input,
@@ -23,6 +67,16 @@ actions!(
         SelectAll,
         Home,
         End,
+        WordLeft,
+        WordRight,
+        SelectWordLeft,
+        SelectWordRight,
+        SelectHome,
+        SelectEnd,
+        DeleteToLineStart,
+        DeleteToLineEnd,
+        DeleteWordLeft,
+        DeleteWordRight,
         ShowCharacterPalette,
         Paste,
         Cut,
@@ -53,6 +107,20 @@ pub fn bind_text_input_keys(cx: &mut App) {
         KeyBinding::new("ctrl-x", Cut, Some("TextInput")),
         KeyBinding::new("home", Home, Some("TextInput")),
         KeyBinding::new("end", End, Some("TextInput")),
+        // macOS text editing, which people expect everywhere and notice when missing.
+        KeyBinding::new("cmd-left", Home, Some("TextInput")),
+        KeyBinding::new("cmd-right", End, Some("TextInput")),
+        KeyBinding::new("cmd-shift-left", SelectHome, Some("TextInput")),
+        KeyBinding::new("cmd-shift-right", SelectEnd, Some("TextInput")),
+        KeyBinding::new("alt-left", WordLeft, Some("TextInput")),
+        KeyBinding::new("alt-right", WordRight, Some("TextInput")),
+        KeyBinding::new("alt-shift-left", SelectWordLeft, Some("TextInput")),
+        KeyBinding::new("alt-shift-right", SelectWordRight, Some("TextInput")),
+        KeyBinding::new("cmd-backspace", DeleteToLineStart, Some("TextInput")),
+        KeyBinding::new("cmd-delete", DeleteToLineEnd, Some("TextInput")),
+        KeyBinding::new("alt-backspace", DeleteWordLeft, Some("TextInput")),
+        KeyBinding::new("alt-delete", DeleteWordRight, Some("TextInput")),
+        KeyBinding::new("ctrl-w", DeleteWordLeft, Some("TextInput")),
         KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some("TextInput")),
         KeyBinding::new("enter", Confirm, Some("TextInput")),
     ]);
@@ -98,6 +166,18 @@ impl TextInput {
         self.content.to_string()
     }
 
+    pub fn set_text(&mut self, text: impl Into<SharedString>) {
+        self.content = text.into();
+        let end = self.content.len();
+        self.selected_range = end..end;
+        self.marked_range = None;
+    }
+
+    pub fn set_text_notify(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.set_text(text);
+        cx.notify();
+    }
+
     fn left(&mut self, _: &Left, _: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
             self.move_to(self.previous_boundary(self.cursor_offset()), cx);
@@ -125,6 +205,81 @@ impl TextInput {
     fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
         self.move_to(0, cx);
         self.select_to(self.content.len(), cx);
+    }
+
+    fn word_start(&self, from: usize) -> usize {
+        word_start(self.content.as_ref(), from)
+    }
+
+    fn word_end(&self, from: usize) -> usize {
+        word_end(self.content.as_ref(), from)
+    }
+
+    fn word_left(&mut self, _: &WordLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.move_to(self.word_start(self.cursor_offset()), cx);
+    }
+
+    fn word_right(&mut self, _: &WordRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.move_to(self.word_end(self.cursor_offset()), cx);
+    }
+
+    fn select_word_left(&mut self, _: &SelectWordLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.select_to(self.word_start(self.cursor_offset()), cx);
+    }
+
+    fn select_word_right(&mut self, _: &SelectWordRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.select_to(self.word_end(self.cursor_offset()), cx);
+    }
+
+    fn select_home(&mut self, _: &SelectHome, _: &mut Window, cx: &mut Context<Self>) {
+        self.select_to(0, cx);
+    }
+
+    fn select_end(&mut self, _: &SelectEnd, _: &mut Window, cx: &mut Context<Self>) {
+        self.select_to(self.content.len(), cx);
+    }
+
+    fn delete_to_line_start(
+        &mut self,
+        _: &DeleteToLineStart,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected_range.is_empty() {
+            self.select_to(0, cx);
+        }
+        self.replace_text_in_range(None, "", window, cx);
+    }
+
+    fn delete_to_line_end(
+        &mut self,
+        _: &DeleteToLineEnd,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected_range.is_empty() {
+            self.select_to(self.content.len(), cx);
+        }
+        self.replace_text_in_range(None, "", window, cx);
+    }
+
+    fn delete_word_left(&mut self, _: &DeleteWordLeft, window: &mut Window, cx: &mut Context<Self>) {
+        if self.selected_range.is_empty() {
+            self.select_to(self.word_start(self.cursor_offset()), cx);
+        }
+        self.replace_text_in_range(None, "", window, cx);
+    }
+
+    fn delete_word_right(
+        &mut self,
+        _: &DeleteWordRight,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected_range.is_empty() {
+            self.select_to(self.word_end(self.cursor_offset()), cx);
+        }
+        self.replace_text_in_range(None, "", window, cx);
     }
 
     fn home(&mut self, _: &Home, _: &mut Window, cx: &mut Context<Self>) {
@@ -487,9 +642,9 @@ impl Element for TextElement {
         let cursor = input.cursor_offset();
         let style = window.text_style();
         let (display_text, text_color) = if content.is_empty() {
-            (input.placeholder.clone(), rgb(MUTE).into())
+            (input.placeholder.clone(), rgb(theme::theme(cx).mute).into())
         } else {
-            (content, rgb(INK).into())
+            (content, rgb(theme::theme(cx).ink).into())
         };
 
         let run = TextRun {
@@ -540,7 +695,7 @@ impl Element for TextElement {
                         point(bounds.left() + cursor_pos, bounds.top()),
                         size(px(8.), bounds.bottom() - bounds.top()),
                     ),
-                    rgb(INK),
+                    rgb(theme::theme(cx).ink),
                 )),
             )
         } else {
@@ -556,7 +711,7 @@ impl Element for TextElement {
                             bounds.bottom(),
                         ),
                     ),
-                    rgba(0xE6_E1_D3_48),
+                    crate::theme::selection(crate::theme::theme(cx)),
                 )),
                 None,
             )
@@ -619,6 +774,16 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::select_all))
             .on_action(cx.listener(Self::home))
             .on_action(cx.listener(Self::end))
+            .on_action(cx.listener(Self::word_left))
+            .on_action(cx.listener(Self::word_right))
+            .on_action(cx.listener(Self::select_word_left))
+            .on_action(cx.listener(Self::select_word_right))
+            .on_action(cx.listener(Self::select_home))
+            .on_action(cx.listener(Self::select_end))
+            .on_action(cx.listener(Self::delete_to_line_start))
+            .on_action(cx.listener(Self::delete_to_line_end))
+            .on_action(cx.listener(Self::delete_word_left))
+            .on_action(cx.listener(Self::delete_word_right))
             .on_action(cx.listener(Self::show_character_palette))
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::cut))
@@ -628,13 +793,13 @@ impl Render for TextInput {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .h(px(ROW))
+            .h(px(theme::space::MD))
             .w_full()
             .px_2()
             .border_1()
             .border_dashed()
-            .border_color(rgb(RULE))
-            .bg(rgb(PAPER))
+            .border_color(rgb(theme::theme(cx).hair))
+            .bg(rgb(theme::theme(cx).paper))
             .overflow_hidden()
             .child(TextElement { input: cx.entity() })
     }
@@ -643,5 +808,60 @@ impl Render for TextInput {
 impl Focusable for TextInput {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{word_end, word_start};
+
+    #[test]
+    fn repeated_word_left_walks_back_through_a_url() {
+        // What ⌥← does in the site field: one meaningful chunk at a time.
+        let text = "http://localhost:5173/path";
+        let mut at = text.len();
+        let mut stops = Vec::new();
+        for _ in 0..4 {
+            at = word_start(text, at);
+            stops.push(&text[at..]);
+        }
+        assert_eq!(
+            stops,
+            vec![
+                "path",
+                "5173/path",
+                "localhost:5173/path",
+                "http://localhost:5173/path",
+            ]
+        );
+    }
+
+    #[test]
+    fn word_movement_skips_runs_of_separators() {
+        let text = "one   two";
+        assert_eq!(word_start(text, text.len()), 6, "from the end, back to `two`");
+        assert_eq!(word_end(text, 0), 3, "from the start, forward to end of `one`");
+        assert_eq!(word_end(text, 3), 9, "then across the gap to end of `two`");
+    }
+
+    #[test]
+    fn word_movement_stops_at_the_edges_rather_than_running_off() {
+        let text = "word";
+        assert_eq!(word_start(text, 0), 0);
+        assert_eq!(word_end(text, text.len()), text.len());
+        assert_eq!(word_start("", 0), 0);
+        assert_eq!(word_end("", 0), 0);
+    }
+
+    #[test]
+    fn word_movement_respects_character_boundaries() {
+        // Byte offsets into multi-byte characters must never slice mid-character.
+        let text = "héllo wörld";
+        let start = word_start(text, text.len());
+        assert!(text.is_char_boundary(start));
+        assert_eq!(&text[start..], "wörld");
+        let end = word_end(text, 0);
+        assert!(text.is_char_boundary(end));
+        assert_eq!(&text[..end], "héllo");
     }
 }

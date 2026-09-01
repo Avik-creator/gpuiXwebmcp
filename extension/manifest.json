@@ -5,7 +5,7 @@
   "description": "Local-dev bridge from document.modelContext to the GPUI WebMCP debugger. Not for untrusted sites.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvMF0NpR1uOgg9tBxCVjXOFaCwVoRbcRk882WqcQEpOAKO3qYrVSbLShTHohCPShqlg4K7A056JF34L70APF88iTU/o9eYhCDbFbP8d+Cp0kC51nKoHEmfz4Ts+QZigyykm5KrrfJ7nu0UH7+jg33wKtG/lXtxy4baGMhhbyTPi62qNGGK6GZxFUfS/4NrJtmnhgobtyRKjL+dW2U5vV7uVM1eT8yn2Muv0Ef6yJ+Zuz+5ZuYWDL5Tk2yfnjDYwpeQ9L1PCRHa29o6nn7oS1W/+SFqXBUo0p2pWL3ta44V/8jUAU5Cy4TXPy5a9pd1diplD6FAQ1do0wIstbon0dKYQIDAQAB",
   "minimum_chrome_version": "150",
-  "permissions": ["tabs"],
+  "permissions": ["tabs", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

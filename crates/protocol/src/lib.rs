@@ -11,7 +11,7 @@ pub use ids::{ExecutionId, PageId};
 pub use inspect_url::{
     find_page_for_url, normalize_inspect_url, origin_from_http_url, page_matches_inspect_url,
 };
-pub use state::{ConnectionStatus, DebuggerState};
+pub use state::{ConnectionStatus, DebuggerState, MAX_EVENTS, MAX_EXECUTIONS};
 pub use types::{Page, Tool, ToolAnnotations, ToolExecution};
 
 pub const PROTOCOL_VERSION: u32 = 1;

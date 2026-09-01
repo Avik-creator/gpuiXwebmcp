@@ -6,6 +6,12 @@
 const LIST_DEBOUNCE_MS = 100;
 let listTimer = 0;
 
+/// True once the toolchange listener is attached, so it is attached only once.
+let watching = false;
+
+/// Runs we can still abort, keyed by the debugger's execution id.
+const inFlight = new Map();
+
 function hasModelContext() {
   return typeof document.modelContext === "object" && document.modelContext !== null;
 }
@@ -113,10 +119,21 @@ function watchTools() {
   if (!hasModelContext() || window !== window.top) {
     return;
   }
-  document.modelContext.ontoolchange = debouncedListTools;
+  const context = document.modelContext;
+  if (typeof context.addEventListener === "function") {
+    // The documented API. Also non-destructive: the page keeps its own handler.
+    if (!watching) {
+      context.addEventListener("toolchange", debouncedListTools);
+      watching = true;
+    }
+    return;
+  }
+  // Older Chrome only exposed the property. Assigning it clobbers whatever the
+  // page installed, so it is the fallback, not the first choice.
+  context.ontoolchange = debouncedListTools;
 }
 
-async function executeNamedTool(name, inputArgs) {
+async function executeNamedTool(name, inputArgs, executionId) {
   if (!hasModelContext()) {
     throw new Error(
       'You must run Chrome with the "WebMCP for testing" flag enabled.'
@@ -125,19 +142,49 @@ async function executeNamedTool(name, inputArgs) {
   const tools = await document.modelContext.getTools();
   const tool = tools.find((candidate) => candidate.name === name);
   if (!tool) {
-    throw new Error(`tool not found: ${name}`);
+    throw new Error("tool not found: " + name);
   }
-
   const args = inputArgs == null ? {} : inputArgs;
-  try {
-    return await document.modelContext.executeTool(tool, args);
-  } catch (error) {
-    const message = error && error.message ? String(error.message) : String(error);
-    if (message.startsWith("Failed to parse input")) {
-      return await document.modelContext.executeTool(tool, JSON.stringify(args));
-    }
-    throw error;
+
+  // WebMCP passes an AbortSignal as execute's second argument. Where that is
+  // supported this is a real abort; where it is not, cancelling only stops us
+  // waiting, and the debugger says exactly that.
+  const controller =
+    typeof AbortController === "function" ? new AbortController() : null;
+  if (executionId && controller) {
+    inFlight.set(executionId, controller);
   }
+  const options = controller ? { signal: controller.signal } : undefined;
+
+  try {
+    try {
+      return await document.modelContext.executeTool(tool, args, options);
+    } catch (error) {
+      const message = error && error.message ? String(error.message) : "";
+      if (message.startsWith("Failed to parse input")) {
+        return await document.modelContext.executeTool(
+          tool,
+          JSON.stringify(args),
+          options
+        );
+      }
+      throw error;
+    }
+  } finally {
+    if (executionId) {
+      inFlight.delete(executionId);
+    }
+  }
+}
+
+function cancelExecution(executionId) {
+  const controller = inFlight.get(executionId);
+  if (!controller) {
+    return false;
+  }
+  controller.abort();
+  inFlight.delete(executionId);
+  return true;
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, reply) => {
@@ -151,8 +198,12 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
       .catch((error) => reply({ ok: false, error: String(error.message || error) }));
     return true;
   }
+  if (message.action === "CANCEL_TOOL") {
+    reply({ ok: cancelExecution(message.executionId) });
+    return true;
+  }
   if (message.action === "EXECUTE_TOOL") {
-    executeNamedTool(message.name, message.arguments)
+    executeNamedTool(message.name, message.arguments, message.executionId)
       .then((result) => reply({ ok: true, result: toJsonValue(result) }))
       .catch((error) =>
         reply({ ok: false, error: String(error && error.message ? error.message : error) })
