@@ -8,13 +8,13 @@ const LOG = [
   "17:54:01  HELLO  fixture backend ready",
   "17:54:02  PAGE_CHANGED  http://localhost:5173/",
   "17:54:02  TOOLS_CHANGED  discovered 3 tools",
-  "13:51:04  TOOL_EXECUTION_STARTED  search_products",
-  "13:51:04  TOOL_EXECUTION_FINISHED  search_products 112ms",
+  "17:54:09  TOOL_EXECUTION_STARTED  search_products",
+  "17:54:09  TOOL_EXECUTION_FINISHED  search_products 112ms",
 ] as const;
 
 export function DebuggerPreview() {
   return (
-    <figure className="overflow-hidden rounded-xl border border-border bg-background shadow-[0_0_40px_rgba(15,23,42,0.8)]">
+    <figure className="overflow-hidden rounded-xl border border-border bg-background shadow-[0_0_40px_rgba(0,0,0,0.8)]">
       <figcaption className="sr-only">
         Mock of the WebMCP Debugger window: site field, pages, tools, inspector, and event log.
       </figcaption>
