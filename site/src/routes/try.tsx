@@ -15,6 +15,7 @@ import {
   type JsonObject,
   type ToolDefinition,
 } from "../lib/webmcp";
+import { normalizeSiteUrl, type ProbeResult } from "../lib/probe-rules";
 
 export const Route = createFileRoute("/try")({ component: TryPage });
 
@@ -31,7 +32,7 @@ interface Run {
   result?: unknown;
   error?: string;
   ms?: number;
-  via: "page" | "document.modelContext";
+  via: "page" | "navigator.modelContext";
 }
 
 interface Note {
@@ -49,6 +50,142 @@ function access(tool: ToolDefinition): { text: string; mutates: boolean } {
   return tool.annotations?.readOnlyHint === true
     ? { text: "Only reads", mutates: false }
     : { text: "Can change things", mutates: true };
+}
+
+type Check =
+  | { state: "idle" }
+  | { state: "checking"; url: string }
+  | { state: "done"; url: string; result: ProbeResult }
+  | { state: "problem"; text: string };
+
+/** Type a site, read what it ships, say whether WebMCP is in it. */
+function SiteCheck() {
+  const [site, setSite] = useState("");
+  const [check, setCheck] = useState<Check>({ state: "idle" });
+
+  async function run() {
+    const normalized = normalizeSiteUrl(site);
+    if (!normalized.ok) {
+      setCheck({ state: "problem", text: normalized.error });
+      return;
+    }
+    const url = normalized.url;
+    setCheck({ state: "checking", url });
+    try {
+      const response = await fetch(`/api/probe?url=${encodeURIComponent(url)}`);
+      const type = response.headers.get("content-type") ?? "";
+      if (!type.includes("application/json")) {
+        setCheck({
+          state: "problem",
+          text: "The check runs on this site's own dev server, which is not answering. Start it with npm run dev and try again.",
+        });
+        return;
+      }
+      setCheck({ state: "done", url, result: (await response.json()) as ProbeResult });
+    } catch (error) {
+      setCheck({ state: "problem", text: `Could not run the check: ${(error as Error).message}` });
+    }
+  }
+
+  const checking = check.state === "checking";
+  const done = check.state === "done" ? check : null;
+  const found = done?.result.ok ? done.result.markers.length > 0 : false;
+
+  return (
+    <section className="mt-16" aria-labelledby="check">
+      <h2 id="check" className="t-label m-0 border-b border-hair pb-2 font-normal">
+        Check a site
+      </h2>
+      <p className="mt-4 text-mute">
+        Type a site and the check reads the page it serves and the scripts it
+        loads, looking for WebMCP calls. It cannot run the page, so it reports
+        what the code references, not what a tab would list. For that, open it
+        in Chrome with the extension loaded and the debugger lists it.
+      </p>
+      <form
+        className="mt-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!checking) void run();
+        }}
+      >
+        <label htmlFor="site" className="t-label block">
+          Site
+        </label>
+        <div className="mt-2 flex items-center gap-4 border-b border-hair pb-2">
+          <input
+            id="site"
+            className="field min-w-0 flex-1"
+            type="text"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="localhost:5173 or example.com"
+            value={site}
+            onChange={(event) => setSite(event.target.value)}
+            aria-invalid={check.state === "problem"}
+          />
+          <button type="submit" className="act shrink-0" disabled={checking}>
+            Check ›
+          </button>
+        </div>
+      </form>
+      {check.state === "checking" && (
+        <p className="m-0 mt-4 text-mute">Checking {check.url}, reading the page and up to 12 of its scripts…</p>
+      )}
+      {check.state === "problem" && <p className="m-0 mt-4 text-accent">{check.text}</p>}
+      {done && !done.result.ok && <p className="m-0 mt-4 text-accent">{done.result.error}</p>}
+      {done && done.result.ok && (
+        <div className="mt-6" aria-live="polite">
+          <p className="t-focus m-0">{found ? "WebMCP is in this site's code" : "No WebMCP in this site's code"}</p>
+          <p className="m-0 mt-1 text-mute">
+            {done.result.title ? `${done.result.title} · ` : ""}
+            {done.result.finalUrl} · {done.result.status} · {done.result.scripts} scripts read ·{" "}
+            {Math.round(done.result.bytes / 1024)} KB
+          </p>
+          {found && (
+            <p className="t-label m-0 mt-4">
+              References <span className="text-hair">·</span> {done.result.markers.join(" · ")}
+            </p>
+          )}
+          {done.result.names.length > 0 && (
+            <div className="mt-4">
+              <p className="t-label m-0">
+                Tool names next to an inputSchema <span className="text-hair">·</span> unverified
+              </p>
+              <ul className="m-0 mt-1 list-none p-0">
+                {done.result.names.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {found && done.result.names.length === 0 && (
+            <p className="m-0 mt-4 text-mute">The calls are there but no tool literal was near them; the tools may be built at runtime.</p>
+          )}
+          {!found && (
+            <p className="m-0 mt-4 text-mute">
+              Nothing in the shipped code names the API. A tool registered by code loaded later, or behind a
+              login, would not show here.
+            </p>
+          )}
+          {found && (
+            <p className="m-0 mt-4 text-mute">
+              This page cannot run another site's tools; the browser keeps them inside their own tab. To run
+              them: start the debugger, load the extension in a Chrome with the flag on, then open the site.
+              They appear under Tools within a second, and Run there executes them for real.
+            </p>
+          )}
+          <p className="mt-4 flex flex-wrap items-center gap-8">
+            <a href={done.url} target="_blank" rel="noopener noreferrer" className="act">
+              Open in a new tab ›
+            </a>
+            {found && <span className="t-label">The debugger lists it once the tab is open</span>}
+          </p>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function TryPage() {
@@ -164,7 +301,7 @@ function TryPage() {
         ? (await context.getTools()).find((tool) => tool.name === registered.tool.name)
         : undefined;
       if (context?.executeTool && listed) {
-        via = "document.modelContext";
+        via = "navigator.modelContext";
         try {
           result = await context.executeTool(listed, args);
         } catch (error) {
@@ -196,13 +333,21 @@ function TryPage() {
       <h1 className="t-focus m-0 mt-2 font-normal">Register a tool on this page, then run it.</h1>
       <p className="mt-6 text-mute">
         This page is a WebMCP host of its own. Paste a tool, press Register, and
-        it goes on <span className="text-ink">document.modelContext</span> the
+        it goes on <span className="text-ink">navigator.modelContext</span> the
         way any site would publish it. The debugger then lists it like any other
         page, and Run below goes through the same API.
       </p>
       <p className={`t-label m-0 mt-4 ${hasContext ? "" : "text-accent"}`}>
         {hasContext ? "WebMCP · available in this browser" : "WebMCP · off in this browser · tools run in the page only"}
       </p>
+      {!hasContext && (
+        <p className="m-0 mt-1 text-mute">
+          To turn it on: Chrome 150 or newer, enable <span className="text-ink">{FLAG}</span>, relaunch, then reload
+          this page. Until then a tool you register here runs inside this page and the debugger cannot see it.
+        </p>
+      )}
+
+      <SiteCheck />
 
       <section className="mt-16" aria-labelledby="define">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hair pb-2">

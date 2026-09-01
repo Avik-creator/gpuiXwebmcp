@@ -5,6 +5,7 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite'
 
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { probePlugin } from './probe-plugin'
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
@@ -14,6 +15,7 @@ const config = defineConfig({
   },
   plugins: [
     devtools(),
+    probePlugin(),
     tailwindcss(),
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     viteReact(),

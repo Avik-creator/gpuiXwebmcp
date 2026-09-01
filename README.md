@@ -93,7 +93,7 @@ the debugger to explain it.
 | Top right reads **Port 17321 in use** | Another debugger (or a stray `ws-server`) already holds the port. Find it with `lsof -nP -iTCP:17321`. |
 | Open says the page reported no tools | Chrome focused or opened the tab, but nothing came back within 12 seconds. The page probably does not use WebMCP, or the tab needs reloading so the content script runs. |
 | Extension loaded, but it never leaves **Waiting for Chrome** | The extension id must match the origin allowlist. If the manifest's `key` field was removed, Chrome assigns a different id and the socket rejects the handshake with 403. |
-| Tools never appear for a page | The page has no `document.modelContext`, or Chrome is older than 150. Reload the tab: the content script runs at `document_start`, so a tab opened before the extension was loaded never got it. |
+| Tools never appear for a page | The page has no `navigator.modelContext` (or `document.modelContext` on early builds), or Chrome is older than 150. Reload the tab: the content script runs at `document_start`, so a tab opened before the extension was loaded never got it. |
 | Everything was working, then stopped | The extension's service worker was evicted. The debugger pings every 20s to prevent that; if you changed `manifest.json` you must reload the extension for the `alarms` permission to take effect. |
 
 ## Explainer site

@@ -23,7 +23,7 @@ const DEMO_TOOLS = [
 ];
 
 /** A page that supports WebMCP and has registered the demo tools. */
-function makeEnvironment({ withModelContext = true, executeTool } = {}) {
+function makeEnvironment({ withModelContext = true, onNavigator = false, executeTool } = {}) {
   const sent = [];
   const listeners = [];
   const toolchange = [];
@@ -38,8 +38,9 @@ function makeEnvironment({ withModelContext = true, executeTool } = {}) {
     readyState: "complete",
     title: "WebMCP demo",
     addEventListener() {},
-    ...(withModelContext ? { modelContext } : {}),
+    ...(withModelContext && !onNavigator ? { modelContext } : {}),
   };
+  const navigatorStub = withModelContext && onNavigator ? { modelContext } : {};
 
   const windowStub = {
     location: { href: "http://127.0.0.1:5173/", origin: "http://127.0.0.1:5173" },
@@ -49,6 +50,7 @@ function makeEnvironment({ withModelContext = true, executeTool } = {}) {
   const context = createContext({
     window: windowStub,
     document: documentStub,
+    navigator: navigatorStub,
     location: { href: "http://127.0.0.1:5173/", origin: "http://127.0.0.1:5173" },
     console,
     setTimeout,
@@ -127,6 +129,21 @@ await test("subscribes to toolchange with addEventListener, not the property", a
     "undefined",
     "the property assignment would clobber the page's own handler"
   );
+});
+
+await test("finds tools hung on navigator.modelContext, as the spec and real sites do", async () => {
+  // travel-demo.bandarra.me registers on window.navigator.modelContext. Looking
+  // only at document.modelContext reported it as a page with no tools at all.
+  const { sent, listeners, toolchange } = makeEnvironment({ onNavigator: true });
+  await wait(200);
+  const message = sent.find((item) => item.type === "tools_changed");
+  assert.ok(message, "no tools_changed was ever sent");
+  assert.equal(message.tools.length, 3);
+  assert.equal(toolchange.length, 1, "toolchange must be watched there too");
+  const result = await new Promise((resolve) => {
+    listeners[0]({ action: "EXECUTE_TOOL", name: "get_user", arguments: {}, executionId: "exec_2" }, {}, resolve);
+  });
+  assert.equal(result.ok, true, "execute must reach the navigator-hosted tool");
 });
 
 await test("a page without WebMCP says so instead of failing silently", async () => {

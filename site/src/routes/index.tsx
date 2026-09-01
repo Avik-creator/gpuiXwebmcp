@@ -34,7 +34,7 @@ const steps = [
   {
     n: "3",
     title: "Then the live tab",
-    body: "A small Chrome extension pipes document.modelContext over a localhost socket. The same Run hits the real page.",
+    body: "A small Chrome extension pipes navigator.modelContext over a localhost socket. The same Run hits the real page.",
   },
 ] as const;
 

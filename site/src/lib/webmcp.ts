@@ -20,12 +20,12 @@ interface ModelContext {
   executeTool?(tool: unknown, args: unknown, options?: unknown): Promise<unknown>;
 }
 
-/** Chrome's experimental API, wherever this version of Chrome hangs it. */
+/** Chrome's experimental API: on navigator per the spec, on document in early builds. */
 export function modelContext(): ModelContext | null {
   if (typeof document === "undefined") return null;
-  const doc = document as unknown as { modelContext?: ModelContext };
   const nav = navigator as unknown as { modelContext?: ModelContext };
-  return doc.modelContext ?? nav.modelContext ?? null;
+  const doc = document as unknown as { modelContext?: ModelContext };
+  return nav.modelContext ?? doc.modelContext ?? null;
 }
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };

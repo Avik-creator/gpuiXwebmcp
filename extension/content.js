@@ -1,5 +1,5 @@
 /**
- * Isolated-world content script. Reads document.modelContext the same way
+ * Isolated-world content script. Reads the page's modelContext the same way
  * Chrome's model-context-tool-inspector does. Do not wrap registerTool.
  */
 
@@ -12,8 +12,24 @@ let watching = false;
 /// Runs we can still abort, keyed by the debugger's execution id.
 const inFlight = new Map();
 
+// The spec hangs the API on navigator, and real sites register there; early
+// Chrome builds hung it on document. Both are checked, navigator first.
+function modelContext() {
+  if (
+    typeof navigator !== "undefined" &&
+    typeof navigator.modelContext === "object" &&
+    navigator.modelContext !== null
+  ) {
+    return navigator.modelContext;
+  }
+  if (typeof document.modelContext === "object" && document.modelContext !== null) {
+    return document.modelContext;
+  }
+  return null;
+}
+
 function hasModelContext() {
-  return typeof document.modelContext === "object" && document.modelContext !== null;
+  return modelContext() !== null;
 }
 
 function normalizeInputSchema(inputSchema) {
@@ -94,7 +110,7 @@ async function listTools() {
     return;
   }
 
-  const discovered = await document.modelContext.getTools();
+  const discovered = await modelContext().getTools();
   const tools = [];
   for (const tool of discovered) {
     tools.push(normalizeTool(tool));
@@ -119,7 +135,7 @@ function watchTools() {
   if (!hasModelContext() || window !== window.top) {
     return;
   }
-  const context = document.modelContext;
+  const context = modelContext();
   if (typeof context.addEventListener === "function") {
     // The documented API. Also non-destructive: the page keeps its own handler.
     if (!watching) {
@@ -139,7 +155,8 @@ async function executeNamedTool(name, inputArgs, executionId) {
       'You must run Chrome with the "WebMCP for testing" flag enabled.'
     );
   }
-  const tools = await document.modelContext.getTools();
+  const context = modelContext();
+  const tools = await context.getTools();
   const tool = tools.find((candidate) => candidate.name === name);
   if (!tool) {
     throw new Error("tool not found: " + name);
@@ -158,11 +175,11 @@ async function executeNamedTool(name, inputArgs, executionId) {
 
   try {
     try {
-      return await document.modelContext.executeTool(tool, args, options);
+      return await context.executeTool(tool, args, options);
     } catch (error) {
       const message = error && error.message ? String(error.message) : "";
       if (message.startsWith("Failed to parse input")) {
-        return await document.modelContext.executeTool(
+        return await context.executeTool(
           tool,
           JSON.stringify(args),
           options

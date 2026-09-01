@@ -5,8 +5,13 @@ const BOOKS = [
 
 const notes = [];
 
+// The spec puts the API on navigator; early Chrome builds put it on document.
+function modelContext() {
+  return navigator.modelContext ?? document.modelContext ?? null;
+}
+
 function supportsWebMCP() {
-  return "modelContext" in document;
+  return modelContext() !== null;
 }
 
 function $(id) {
@@ -162,12 +167,12 @@ async function registerTools() {
   banner.hidden = true;
 
   for (const tool of TOOLS) {
-    await document.modelContext.registerTool(tool);
+    await modelContext().registerTool(tool);
   }
 
   let names = TOOLS.map((tool) => tool.name);
   try {
-    const discovered = await document.modelContext.getTools();
+    const discovered = await modelContext().getTools();
     names = discovered.map((tool) => tool.name);
   } catch (error) {
     console.warn("getTools failed after registerTool", error);
@@ -184,5 +189,5 @@ registerTools().catch((error) => {
   setStatus("missing", "Registration failed");
   $("flag-banner").hidden = false;
   $("flag-banner").textContent =
-    "document.modelContext.registerTool failed. See the console for the error.";
+    "modelContext.registerTool failed. See the console for the error.";
 });
