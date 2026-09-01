@@ -8,7 +8,23 @@ Build a native GPUI WebMCP debugger as a developer tool: first a working four-pa
 - [x] Phase 2 — Primitive JSON Schema form + Execute against fixture
 - [x] Phase 3 — Demo site with `get_user`, `search_products`, `create_note`
 - [x] Phase 4 — MV3 extension: `getTools` / `executeTool` / `ontoolchange` → WebSocket on `127.0.0.1` with `chrome-extension` Origin allowlist
-- [ ] Phase 5 — ChromeBridge: GPUI lists live tab tools and Execute returns real WebMCP results
+- [x] Phase 5 — ChromeBridge: GPUI lists live tab tools and Execute returns real WebMCP results
+
+### V2 — three places instead of four panels
+
+The four-panel layout is retired. Survey, Compose and Record are named in the bar
+on every screen; Running, Result and Failed are states Compose morphs through
+rather than destinations. See `design/` for the canvas this was built from.
+
+- [x] Bridge reliability — the unregister leak, late results recorded rather than dropped, bounded history
+- [x] Repo hygiene — prerequisites, LICENSE, site palette
+- [x] Design foundation — five tokens, two palettes, contrast enforced by test
+- [x] Shell and routing — the bar is the router
+- [x] Schema engine — full JSON Schema, per-field fallback
+- [x] Survey and Record
+- [x] Compose and its states
+- [x] Command palette
+- [x] Extension plumbing — cancel, per-page tool cache, single-client routing
 
 ## Product
 
@@ -82,9 +98,9 @@ Core types stay close to the write-up (`Page`, `Tool`, `ToolExecution`, `Debugge
 
 Do not wrap `registerTool`. Do not depend on `navigator.modelContextTesting` (older docs; current inspector uses `document.modelContext`).
 
-**4. Schema forms: primitives only.** Object properties of `string` | `number` | `integer` | `boolean`, plus `required`. Anything else (arrays, nested objects, `oneOf`, `enum` beyond a simple select) falls back to a JSON textarea. Full JSON Schema is how this project dies in week one.
+**4. Schema forms: primitives only** — *superseded.* This was right for the MVP and wrong afterwards: one nested object collapsed the entire form to a textarea, so a six-property tool became unusable. The rule that replaced it is **per-field fallback** — an unrecognised property degrades that field alone and everything else stays a control. Full JSON Schema did not kill the project because the engine landed headless and tested before any UI depended on it (`crates/debugger/src/schema.rs`).
 
-**5. Pin GPUI from crates.io.** Current published crate is `gpui` 0.2.2. On macOS also take `gpui_platform` with `font-kit`. Text fields exist as an official example (`crates/gpui/examples/input.rs` in Zed); copy that pattern rather than inventing an editor.
+**5. Pin GPUI from crates.io.** Current published crate is `gpui` 0.2.2 — the published release, not Zed's `main`, so its API surface is narrower than the Zed tree. Text fields exist as an official example (`crates/gpui/examples/input.rs` in Zed); copy that pattern rather than inventing an editor. (An earlier draft of this decision said to also take `gpui_platform` with `font-kit` on macOS. There is no such crate at 0.2.2 — see the Phase 2 note below. Nothing needs it.)
 
 **6. Treat the debugger as a privileged native process.** GPUI does not sandbox us. See the threat model below. Phase 4 must bind `127.0.0.1` only and reject WebSocket clients that are not our extension.
 
@@ -158,7 +174,11 @@ flowchart LR
 
 **5. Annotations we already planned to store.** Surface `readOnlyHint` and `untrustedContentHint` in the tool list (badge). For MVP, Execute stays one click (this is a debugger, not an agent). A confirm dialog on non-localhost origins can wait until after Phase 5.
 
-Phase 1–2 (fixture only) have almost no of this surface: no socket, no Chrome, fake JSON.
+**6. `open_page` is a navigation primitive.** The SITE field sends a user-typed URL to the extension, which focuses or creates a tab. An unchecked string here would let the debugger drive `javascript:` — script execution in an arbitrary tab, from a field. Both sides validate independently and neither trusts the other: `normalize_inspect_url` in `crates/protocol/src/inspect_url.rs` rejects control characters and blocks twelve schemes before allowing only `http`/`https`, and `background.js` repeats the check with the real `URL` parser before calling `chrome.tabs.update` or `create` (commit `0adf7cc`). The URL must only ever come from the field the user typed into — never from a page payload, which is why `DebuggerCommand::OpenPage` carries that warning in `commands.rs`.
+
+**7. Results we cannot attach.** A result arriving after its execution timed out, or naming an execution we never started, is recorded in the log and explicitly **not applied** to the settled outcome. Silently dropping it hides evidence; applying it would let a late or forged frame rewrite history. Frames that fail to parse are reported the same way rather than discarded, so a mismatched extension is visible instead of looking like silence.
+
+Phase 1–2 (fixture only) have almost none of this surface: no socket, no Chrome, fake JSON.
 
 ## Repo layout
 
@@ -169,6 +189,9 @@ gpuiXwebmcp/
   crates/debugger/           GPUI app + FixtureBackend + WS server
   extension/                 MV3: background, content, no UI
   demo-site/                 vanilla HTML/JS, 3 tools
+  site/                      TanStack Router explainer (not shipped with the app)
+  scripts/                   watch_bridge.py — CLI WS client that forges the extension Origin
+  design/                    V2 design canvas sources (.dc.html artboards)
   plan/                      this document
 ```
 

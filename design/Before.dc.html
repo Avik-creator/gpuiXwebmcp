@@ -1,0 +1,141 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root {
+      --paper: #0A0A0A; --lift: #121210; --hover: #1C1C18;
+      --ink: #E6E1D3; --mute: #7A7568; --rule: #4A463C; --rust: #C45C3A;
+      --row: 24px;
+      --mono: Menlo, "SF Mono", "JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+    }
+    body { margin: 0; }
+    a { color: var(--rust); } a:hover { color: var(--ink); }
+    .app {
+      width: 1200px; height: 800px; box-sizing: border-box;
+      background: var(--paper); color: var(--ink);
+      font-family: var(--mono); font-size: 12px; line-height: 18px;
+      padding: 10px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;
+    }
+    .frame { box-sizing: border-box; border: 1px dashed var(--rule); background: var(--lift); display: flex; flex-direction: column; min-height: 0; }
+    .bracket {
+      display: flex; align-items: center; height: var(--row); padding: 0 8px;
+      border-bottom: 1px dashed var(--rule); color: var(--mute); flex-shrink: 0;
+    }
+    .mute { color: var(--mute); }
+    .rust { color: var(--rust); }
+    .body { flex: 1; min-height: 0; padding: 4px 0; overflow: hidden; }
+    .row { display: flex; flex-direction: column; padding: 4px 8px; }
+    .row-top { display: flex; gap: 8px; min-width: 0; }
+    .row-sub { padding-left: 16px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sel { background: var(--ink); color: var(--paper); }
+    .sel .row-sub { color: var(--paper); }
+    .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bdg { color: var(--mute); flex-shrink: 0; }
+    .sel .bdg { color: var(--paper); }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .input {
+      display: flex; align-items: center; height: var(--row); padding: 0 8px;
+      background: var(--paper); border: 1px dashed var(--rule); color: var(--mute);
+    }
+    .code { border: 1px dashed var(--rule); background: var(--paper); color: var(--ink); padding: 8px; white-space: pre; overflow: hidden; }
+    .btn-ghost { display: flex; align-items: center; justify-content: center; height: var(--row); padding: 0 12px; border: 1px dashed var(--rule); color: var(--mute); }
+    .logline { white-space: pre; color: var(--mute); }
+  </style>
+</helmet>
+
+<div class="app">
+
+  <div class="frame" style="flex-shrink:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 12px">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <div>WEBMCP</div><div class="mute">http://localhost:5173</div>
+      </div>
+      <div style="padding:0 8px">[ LIVE · 1 ]</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:0 12px 8px 12px">
+      <div class="mute">SITE</div>
+      <div class="input" style="flex:1">http://localhost:5173</div>
+      <div style="display:flex;align-items:center;height:var(--row);padding:0 8px;border:1px solid var(--ink);background:var(--ink);color:var(--paper)">GO</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;flex:1;min-height:0">
+
+    <div class="frame" style="width:228px;flex-shrink:0">
+      <div class="bracket">[ PAGES ]</div>
+      <div class="body">
+        <div class="row sel"><div class="row-top"><span>*</span><span class="nm">localhost:5173</span></div><div class="row-sub">WebMCP demo</div></div>
+        <div class="row"><div class="row-top"><span>&nbsp;</span><span class="nm">app.linear.app</span></div><div class="row-sub">Linear — Inbox</div></div>
+        <div class="row"><div class="row-top"><span>&nbsp;</span><span class="nm">github.com</span></div><div class="row-sub">zed-industries/zed</div></div>
+      </div>
+    </div>
+
+    <div class="frame" style="width:268px;flex-shrink:0">
+      <div class="bracket">[ TOOLS ]</div>
+      <div class="body">
+        <div class="row"><div class="row-top"><span>&nbsp;</span><span class="nm">get_user</span><span class="bdg">[RO]</span></div><div class="row-sub">Get user</div></div>
+        <div class="row"><div class="row-top"><span>&nbsp;</span><span class="nm">search_products</span><span class="bdg">[RO]</span></div><div class="row-sub">Search products</div></div>
+        <div class="row sel"><div class="row-top"><span>*</span><span class="nm">create_order</span><span class="bdg">[UNTRUSTED]</span></div><div class="row-sub">Create an order</div></div>
+        <div class="row"><div class="row-top"><span>&nbsp;</span><span class="nm">create_note</span><span class="bdg">[UNTRUSTED]</span></div><div class="row-sub">Create note</div></div>
+        <div class="row"><div class="row-top"><span>&nbsp;</span><span class="nm">list_invoices</span><span class="bdg">[RO]</span></div><div class="row-sub">List invoices</div></div>
+        <div class="row"><div class="row-top"><span>&nbsp;</span><span class="nm">cancel_order</span></div><div class="row-sub">Cancel an order</div></div>
+      </div>
+    </div>
+
+    <div class="frame" style="flex:1;min-width:0;box-shadow:6px 6px 0 0 #000">
+      <div class="bracket">[ INSPECT ]</div>
+      <div style="flex:1;min-height:0;padding:12px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+        <div>create_order</div>
+        <div class="mute">UNTRUSTED OUTPUT</div>
+        <div class="field">
+          <div class="mute">DESCRIPTION</div>
+          <div>Place an order for the signed-in customer and return the order id.</div>
+        </div>
+        <div class="field">
+          <div class="mute">SCHEMA</div>
+          <div class="code" style="height:132px;box-sizing:border-box">{
+  "type": "object",
+  "properties": {
+    "customer": {
+      "type": "object",
+      "properties": {</div>
+        </div>
+        <div class="field">
+          <div class="mute">ARGUMENTS</div>
+          <div class="input">JSON arguments</div>
+        </div>
+        <div class="btn-ghost">↵ EXECUTE</div>
+        <div class="field">
+          <div class="mute">RESULT</div>
+          <div class="mute">NONE</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame" style="height:168px;flex-shrink:0">
+    <div class="bracket">[ LOG ]</div>
+    <div style="flex:1;min-height:0;padding:4px 8px;overflow:hidden">
+      <div class="logline">14:22:03  HELLO                   extension protocol v1</div>
+      <div class="logline">14:22:03  PAGE_CHANGED            http://localhost:5173/</div>
+      <div class="logline">14:22:04  TOOLS_CHANGED           discovered 6 tools</div>
+      <div class="logline">14:22:31  TOOL_EXECUTION_STARTED  get_user {}</div>
+      <div class="logline">14:22:31  TOOL_EXECUTION_FINISHED  get_user 88ms</div>
+      <div class="logline rust">14:22:40  TOOL_EXECUTION_FAILED   create_note text is required</div>
+    </div>
+  </div>
+
+  <div class="mute" style="display:flex;gap:16px;padding:0 4px;flex-shrink:0">
+    <span>⌘↵ EXECUTE</span><span>↵ OPEN SITE</span><span>⌃T MODE</span><span>⌘⇧C COPY</span>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

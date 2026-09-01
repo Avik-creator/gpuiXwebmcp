@@ -1,17 +1,21 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
+/* These are the debugger's own tokens, not a separate palette. Keep them in step
+   with crates/debugger/src/theme.rs — the site claiming a palette it did not have
+   is exactly what went wrong before. Near-black ground, warm bone ink, rust for
+   fault only. Not slate, not Tailwind green. */
 @theme {
-  --color-background: #0f172a;
-  --color-foreground: #f8fafc;
-  --color-card: #1b2336;
-  --color-muted: #272f42;
-  --color-muted-foreground: #94a3b8;
-  --color-border: #475569;
-  --color-accent: #22c55e;
-  --color-on-accent: #0f172a;
-  --color-selected: #334155;
-  --color-destructive: #f87171;
+  --color-background: #0a0a0a;
+  --color-foreground: #e6e1d3;
+  --color-card: #121210;
+  --color-muted: #1c1c18;
+  --color-muted-foreground: #8a8577;
+  --color-border: #2a2724;
+  --color-accent: #c45c3a;
+  --color-on-accent: #0a0a0a;
+  --color-selected: #1c1c18;
+  --color-destructive: #c45c3a;
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, Monaco, monospace;
 }

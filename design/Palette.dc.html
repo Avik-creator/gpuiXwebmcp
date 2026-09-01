@@ -1,0 +1,299 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root {
+      --paper: #0A0A0A;
+      --lift:  #121210;
+      --hover: #1C1C18;
+      --ink:   #E6E1D3;
+      --mute:  #7A7568;
+      --rule:  #4A463C;
+      --rust:  #C45C3A;
+      --row: 24px;
+      --gutter: 10px;
+      --mono: Menlo, "SF Mono", "JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+    }
+    body { margin: 0; }
+    a { color: var(--rust); } a:hover { color: var(--ink); }
+    .app {
+      width: 1200px; height: 800px; box-sizing: border-box;
+      background: var(--paper); color: var(--ink);
+      font-family: var(--mono); font-size: 12px; line-height: 18px;
+      padding: var(--gutter); display: flex; flex-direction: column; gap: var(--gutter);
+      overflow: hidden;
+    }
+    .frame {
+      display: flex; flex-direction: column; min-height: 0;
+      border: 1px dashed var(--rule); background: var(--lift);
+    }
+    .bracket {
+      display: flex; align-items: center; height: var(--row);
+      padding: 0 8px; border-bottom: 1px dashed var(--rule); color: var(--mute);
+      flex-shrink: 0; justify-content: space-between;
+    }
+    .cols { display: flex; flex-direction: row; gap: var(--gutter); flex: 1; min-height: 0; }
+    .body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 0; overflow: hidden; }
+    .row { display: flex; flex-direction: column; padding: 4px 8px; }
+    .row-top { display: flex; gap: 8px; min-width: 0; align-items: baseline; }
+    .row-sub { padding-left: 16px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sel { background: var(--ink); color: var(--paper); }
+    .sel .row-sub { color: var(--paper); }
+    .hov { background: var(--hover); }
+    .name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .badge { color: var(--mute); flex-shrink: 0; }
+    .sel .badge { color: var(--paper); }
+    .count { color: var(--mute); flex-shrink: 0; }
+    .sel .count { color: var(--paper); }
+    .mute { color: var(--mute); }
+    .rust { color: var(--rust); }
+    .btn-solid {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: var(--row); padding: 0 12px; border: 1px solid var(--ink);
+      background: var(--ink); color: var(--paper); flex-shrink: 0;
+    }
+    .btn-ghost {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: var(--row); padding: 0 12px; border: 1px dashed var(--rule);
+      color: var(--mute); background: transparent; flex-shrink: 0;
+    }
+    .code {
+      border: 1px dashed var(--rule); background: var(--paper); color: var(--ink);
+      padding: 8px; overflow: hidden;
+    }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .input {
+      display: flex; align-items: center; height: var(--row); padding: 0 8px;
+      background: var(--paper); border: 1px dashed var(--rule); color: var(--ink);
+    }
+    .input.err { border-color: var(--rust); }
+    .caret { display: inline-block; width: 8px; height: 14px; background: var(--ink); margin-left: 1px; }
+    .seg { display: flex; gap: 0; height: var(--row); }
+    .seg > div {
+      display: flex; align-items: center; padding: 0 10px;
+      border: 1px dashed var(--rule); border-right: none; color: var(--mute); background: var(--paper);
+    }
+    .seg > div:last-child { border-right: 1px dashed var(--rule); }
+    .seg > div.on { background: var(--ink); color: var(--paper); border-style: solid; border-color: var(--ink); }
+    .arr-row { display: flex; gap: 8px; align-items: center; }
+    .arr-row .input { flex: 1; }
+    .minus {
+      display: flex; align-items: center; justify-content: center;
+      width: var(--row); height: var(--row); border: 1px dashed var(--rule); color: var(--mute); flex-shrink: 0;
+    }
+    .obj {
+      border-left: 1px dashed var(--rule); padding-left: 10px; margin-left: 2px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .logline { white-space: pre; color: var(--mute); }
+    .keymap { display: flex; align-items: center; gap: 16px; padding: 0 4px; color: var(--mute); flex-shrink: 0; }
+    .insp { flex: 1; min-width: 0; box-shadow: 6px 6px 0 0 #000; }
+    .app { position: relative; }
+    .scrim { position: absolute; inset: 0; background: rgba(10,10,10,0.74); }
+    .pal {
+      position: absolute; left: 320px; top: 120px; width: 560px;
+      border: 1px dashed var(--rule); background: var(--lift);
+      box-shadow: 6px 6px 0 0 #000; display: flex; flex-direction: column;
+    }
+    .pal-q { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-bottom: 1px dashed var(--rule); }
+    .pal-group { color: var(--mute); padding: 6px 12px 0 12px; }
+    .pal-row { display: flex; align-items: center; justify-content: space-between; height: var(--row); padding: 0 12px; }
+    .pal-row.on { background: var(--ink); color: var(--paper); }
+    .pal-row .k { color: var(--mute); }
+    .pal-row.on .k { color: var(--paper); }
+    .pal-foot { display: flex; gap: 16px; align-items: center; height: var(--row); padding: 0 12px; border-top: 1px dashed var(--rule); color: var(--mute); }
+  </style>
+</helmet>
+
+<div class="app">
+
+  <!-- ══ HEADER ══ -->
+  <div class="frame" style="flex-shrink:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 12px">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <div>WEBMCP</div>
+        <div class="mute" style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">http://localhost:5173</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="mute">6 tools</div>
+        <div style="display:flex;align-items:center;padding:0 8px;height:var(--row)">[ LIVE · 1 ]</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:0 12px 8px 12px">
+      <div class="mute" style="flex-shrink:0">SITE</div>
+      <div class="input" style="flex:1;min-width:0">http://localhost:5173</div>
+      <div class="btn-solid" style="padding:0 8px">GO</div>
+    </div>
+  </div>
+
+  <!-- ══ THREE COLUMNS ══ -->
+  <div class="cols">
+
+    <!-- PAGES -->
+    <div class="frame" style="width:228px;flex-shrink:0">
+      <div class="bracket"><span>[ PAGES ]</span></div>
+      <div class="body">
+        <div class="row sel">
+          <div class="row-top"><span>*</span><span class="name">localhost:5173</span><span class="count">6</span></div>
+          <div class="row-sub">WebMCP demo</div>
+        </div>
+        <div class="row hov">
+          <div class="row-top"><span>&nbsp;</span><span class="name">app.linear.app</span><span class="count">14</span></div>
+          <div class="row-sub">Linear — Inbox</div>
+        </div>
+        <div class="row">
+          <div class="row-top"><span>&nbsp;</span><span class="name">github.com</span><span class="count">3</span></div>
+          <div class="row-sub">zed-industries/zed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOOLS -->
+    <div class="frame" style="width:268px;flex-shrink:0">
+      <div class="bracket"><span>[ TOOLS ]</span></div>
+      <div class="body">
+        <div class="row">
+          <div class="row-top"><span>&nbsp;</span><span class="name">get_user</span><span class="badge">[RO]</span></div>
+          <div class="row-sub">Get user</div>
+        </div>
+        <div class="row">
+          <div class="row-top"><span>&nbsp;</span><span class="name">search_products</span><span class="badge">[RO]</span></div>
+          <div class="row-sub">Search products</div>
+        </div>
+        <div class="row sel">
+          <div class="row-top"><span>*</span><span class="name">create_order</span><span class="badge">[UNTRUSTED]</span></div>
+          <div class="row-sub">Create an order</div>
+        </div>
+        <div class="row">
+          <div class="row-top"><span>&nbsp;</span><span class="name">create_note</span><span class="badge">[UNTRUSTED]</span></div>
+          <div class="row-sub">Create note</div>
+        </div>
+        <div class="row">
+          <div class="row-top"><span>&nbsp;</span><span class="name">list_invoices</span><span class="badge">[RO]</span></div>
+          <div class="row-sub">List invoices</div>
+        </div>
+        <div class="row">
+          <div class="row-top"><span>&nbsp;</span><span class="name">cancel_order</span></div>
+          <div class="row-sub">Cancel an order</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INSPECT -->
+    <div class="frame insp">
+      <div class="bracket"><span>[ INSPECT ]</span><span class="mute">ARGS 4/6</span></div>
+      <div style="flex:1;min-height:0;padding:12px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div>create_order</div>
+          <div class="mute">UNTRUSTED OUTPUT</div>
+        </div>
+
+        <div class="field">
+          <div class="mute">DESCRIPTION</div>
+          <div>Place an order for the signed-in customer and return the order id.</div>
+        </div>
+
+        <div class="mute" style="display:flex;gap:8px;align-items:center">
+          <span>▸ SCHEMA</span><span style="color:var(--rule)">object · 6 properties · 2 required</span>
+        </div>
+
+        <div class="field">
+          <div class="mute">ARGUMENTS</div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+
+            <!-- enum -->
+            <div class="field">
+              <div class="mute">PRIORITY</div>
+              <div class="seg">
+                <div>low</div><div class="on">normal</div><div>urgent</div>
+              </div>
+            </div>
+
+            <!-- array with validation error -->
+            <div class="field">
+              <div style="display:flex;justify-content:space-between">
+                <span class="mute">ITEMS *</span><span class="mute">array&lt;string&gt; · min 1</span>
+              </div>
+              <div class="arr-row">
+                <div class="input">SKU-4471<span class="caret"></span></div>
+                <div class="minus">−</div>
+              </div>
+              <div class="arr-row">
+                <div class="input err"><span class="mute">empty</span></div>
+                <div class="minus">−</div>
+              </div>
+              <div class="rust">items[1] must not be empty</div>
+              <div class="btn-ghost" style="align-self:flex-start;padding:0 8px">+ ADD</div>
+            </div>
+
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px">
+          <div class="btn-ghost" style="flex:1">↵ EXECUTE</div>
+        </div>
+
+        <div class="field">
+          <div style="display:flex;justify-content:space-between">
+            <span class="mute">RESULT</span><span class="mute">NONE</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ LOG ══ -->
+  <div class="frame" style="height:168px;flex-shrink:0">
+    <div class="bracket"><span>[ LOG ]</span><span class="mute">348 events · FOLLOWING</span></div>
+    <div style="flex:1;min-height:0;padding:4px 8px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end">
+      <div class="logline">14:22:04  TOOLS         discovered 6 tools</div>
+      <div class="logline">14:22:09  EXEC_START    create_order {"priority":"urgent","items":["SKU-4471"]}</div>
+      <div class="logline">14:22:09  EXEC_OK       create_order 412ms</div>
+      <div class="logline">14:22:18  EXEC_START    search_products {"query":"gpui"}</div>
+      <div class="logline">14:22:24  EXEC_CANCEL   search_products cancelled by operator</div>
+      <div class="logline rust">14:22:31  PROTO_ERR     tool_execution_finished failed to parse — dropped</div>
+      <div class="logline rust">14:22:40  EXEC_FAIL     create_note text is required</div>
+      <div class="logline rust">14:22:52  EXEC_LATE     create_order arrived 3.2s after timeout — recorded</div>
+    </div>
+  </div>
+
+  <div class="keymap">
+    <span>⌘K PALETTE</span>
+    <span>⌘↵ EXECUTE</span>
+    <span>⌃C CANCEL</span>
+    <span>⇥ NEXT FIELD</span>
+    <span>⌃T MODE</span>
+    <span>⌘⇧C COPY</span>
+  </div>
+
+  <div class="scrim"></div>
+  <div class="pal">
+    <div class="bracket"><span>[ COMMAND ]</span><span class="mute">7 of 34</span></div>
+    <div class="pal-q"><span class="mute">&gt;</span><span>exe</span><span class="caret"></span></div>
+    <div style="padding-bottom:6px">
+      <div class="pal-group">COMMANDS</div>
+      <div class="pal-row on"><span>Execute tool</span><span class="k">⌘↵</span></div>
+      <div class="pal-row"><span>Cancel execution</span><span class="k">⌃C</span></div>
+      <div class="pal-row"><span>Toggle backend — fixture ⇄ live</span><span class="k">⌃T</span></div>
+      <div class="pal-group">GO TO TOOL</div>
+      <div class="pal-row"><span>create_order</span><span class="k">[UNTRUSTED]</span></div>
+      <div class="pal-row"><span>cancel_order</span><span class="k">&nbsp;</span></div>
+      <div class="pal-group">GO TO PAGE</div>
+      <div class="pal-row"><span>localhost:5173</span><span class="k">6 tools</span></div>
+    </div>
+    <div class="pal-foot"><span>↑↓ MOVE</span><span>↵ RUN</span><span>ESC CLOSE</span></div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

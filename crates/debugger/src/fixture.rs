@@ -135,6 +135,7 @@ fn fixture_state() -> DebuggerState {
     DebuggerState {
         pages: vec![page],
         selected_page: Some(page_id),
+        tools_by_page: Default::default(),
         selected_tool: Some("search_products".to_string()),
         tools,
         executions: Vec::new(),
@@ -162,6 +163,15 @@ fn fixture_state() -> DebuggerState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_playground_can_never_open_on_an_empty_screen() {
+        // The whole point of the playground is that it works with nothing else
+        // set up. If this is ever empty, entering it shows a blank window.
+        let state = FixtureBackend.snapshot();
+        assert!(!state.tools.is_empty(), "the playground must always have tools");
+        assert!(!state.pages.is_empty(), "and a page for them to belong to");
+    }
 
     #[test]
     fn fixture_exposes_the_three_demo_tools() {

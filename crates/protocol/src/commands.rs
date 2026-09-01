@@ -15,6 +15,20 @@ pub enum DebuggerCommand {
         arguments: Value,
         execution_id: ExecutionId,
     },
+    /// Sent on a timer purely so the MV3 service worker stays alive.
+    ///
+    /// Chrome evicts an idle extension service worker after about 30 seconds.
+    /// Handling a message resets that timer, so a periodic no-op is what keeps
+    /// the bridge up. Without it the extension dies, the socket drops, and the
+    /// debugger sees no tools at all until something happens to revive it.
+    Ping,
+    /// Ask the page to abort a run. WebMCP passes an `AbortSignal` as the second
+    /// argument to `execute`, so this is a real abort rather than us just looking
+    /// away — where the browser supports it.
+    CancelExecution {
+        page_id: PageId,
+        execution_id: ExecutionId,
+    },
     /// User-typed http(s) URL from the debugger search bar. Never a page payload.
     OpenPage {
         url: String,

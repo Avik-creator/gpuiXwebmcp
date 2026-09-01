@@ -32,10 +32,10 @@ function GpuiPage() {
       <section className="mt-10 rounded-xl border border-border bg-card p-6">
         <h2 className="text-xl font-medium">Why we used it here</h2>
         <p className="mt-3 text-muted-foreground">
-          We wanted the inspector to feel like the app you already saw in
-          screenshots: slate background, card panels, green Execute, event log
-          along the bottom. GPUI gives us that native surface. Chrome’s own
-          inspector stays a side panel. Different job.
+          We wanted the inspector to read as a native tool rather than a web page
+          in a frame: near-black ground, warm bone text, one rust accent reserved
+          for faults, and a recorded trace of everything you ran. GPUI gives us
+          that surface. Chrome’s own inspector stays a side panel. Different job.
         </p>
       </section>
 

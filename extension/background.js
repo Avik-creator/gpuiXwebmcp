@@ -9,6 +9,15 @@ function isoNow() {
   return new Date().toISOString();
 }
 
+function originOf(url) {
+  if (!url) return "";
+  try {
+    return new URL(url).origin;
+  } catch (error) {
+    return "";
+  }
+}
+
 function pageIdForTab(tabId) {
   return `tab:${tabId}`;
 }
@@ -73,7 +82,29 @@ function connect() {
   });
 
   socket.addEventListener("close", () => {
-    scheduleReconnect();
+    scheduleRe// Chrome evicts an idle service worker after about 30 seconds, which closes the
+// socket and leaves the debugger seeing nothing. Two defences: the debugger
+// pings us well inside that window, and this alarm revives us if we are evicted
+// anyway — an alarm firing starts the worker back up.
+const KEEPALIVE_ALARM = "webmcp-keepalive";
+
+chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === KEEPALIVE_ALARM) {
+    connect();
+  }
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  connect();
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  connect();
+});
+
+connect();
   });
 
   socket.addEventListener("error", () => {
@@ -105,6 +136,22 @@ async function handleCommand(command) {
     }
     case "execute_tool": {
       await executeOnTab(command);
+      return;
+    }
+    // The debugger pings on a timer. Handling a message is what resets Chrome's
+    // service-worker idle timer, so receiving this is the entire point of it.
+    case "ping":
+      return;
+    case "cancel_execution": {
+      const tabId = parseTabId(command.page_id);
+      if (tabId !== null) {
+        chrome.tabs
+          .sendMessage(tabId, {
+            action: "CANCEL_TOOL",
+            executionId: command.execution_id,
+          })
+          .catch(() => {});
+      }
       return;
     }
     case "open_page": {
@@ -234,6 +281,7 @@ async function executeOnTab(command) {
       action: "EXECUTE_TOOL",
       name: tool,
       arguments: args,
+      executionId,
     });
     const durationMs = Date.now() - t0;
     if (response && response.ok) {
@@ -271,9 +319,12 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   }
   const page = {
     id: pageIdForTab(tab.id),
-    url: message.url || tab.url || "",
-    title: message.title || tab.title || "",
-    origin: message.origin || "",
+    // Chrome's own view of the tab wins. `message.*` is page-influenced —
+    // document.title and history.pushState are both attacker-controlled — so it
+    // is only a fallback for fields Chrome did not give us.
+    url: tab.url || message.url || "",
+    title: tab.title || message.title || "",
+    origin: originOf(tab.url) || message.origin || "",
   };
 
   if (message.type === "content_script_ready" || message.type === "tools_unavailable") {
@@ -310,6 +361,10 @@ chrome.runtime.onMessage.addListener((message, sender) => {
       timestamp: isoNow(),
     });
   }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  sendEvent({ type: "page_closed", page_id: pageIdForTab(tabId) });
 });
 
 chrome.tabs.onActivated.addListener((info) => {

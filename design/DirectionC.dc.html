@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root {
+      --paper: #0A0A0A; --lift: #121210; --fill: #1C1C18;
+      --ink: #E6E1D3; --mute: #7A7568; --rule: #4A463C; --rust: #C45C3A;
+      --row: 24px;
+      --mono: Menlo, "SF Mono", "JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+    }
+    body { margin: 0; }
+    a { color: var(--mute); } a:hover { color: var(--ink); }
+    .app {
+      width: 1200px; height: 800px; box-sizing: border-box;
+      background: var(--paper); color: var(--ink);
+      font-family: var(--mono); font-size: 12px; line-height: 18px;
+      padding: 10px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;
+    }
+    .frame { box-sizing: border-box; border: 1px dashed var(--rule); background: var(--lift); display: flex; flex-direction: column; min-height: 0; }
+    .bracket {
+      display: flex; align-items: center; justify-content: space-between;
+      height: var(--row); padding: 0 8px; border-bottom: 1px dashed var(--rule);
+      color: var(--mute); flex-shrink: 0;
+    }
+    .mute { color: var(--mute); }
+    .rust { color: var(--rust); }
+    .ev { display: flex; gap: 8px; padding: 2px 8px; white-space: pre; color: var(--mute); }
+    .ev.sel { background: var(--ink); color: var(--paper); }
+    .ev.run { color: var(--ink); }
+    .chip { display: flex; align-items: center; padding: 0 8px; height: 20px; border: 1px dashed var(--rule); color: var(--mute); flex-shrink: 0; }
+    .chip.on { border-style: solid; border-color: var(--ink); color: var(--ink); }
+    .ln { background: var(--fill); height: 10px; margin: 4px 0; }
+    .cap { color: var(--mute); }
+    .pre { white-space: pre; }
+    .comp {
+      display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px;
+      border-top: 1px dashed var(--rule); flex-shrink: 0;
+    }
+    .go { display: flex; align-items: center; padding: 0 10px; height: var(--row); border: 1px solid var(--ink); background: var(--ink); color: var(--paper); }
+  </style>
+</helmet>
+
+<div class="app">
+
+  <div class="frame" style="flex-shrink:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 12px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div>WEBMCP</div><div class="mute">localhost:5173 · 6 tools</div>
+      </div>
+      <div>[ LIVE · 1 ]</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;flex:1;min-height:0">
+
+    <!-- the whole event history, full height -->
+    <div class="frame" style="width:420px;flex-shrink:0">
+      <div class="bracket"><span>[ HISTORY ]</span><span>348 · FOLLOWING</span></div>
+      <div style="display:flex;gap:6px;padding:6px 8px;border-bottom:1px dashed var(--rule);flex-shrink:0">
+        <div class="chip on">ALL</div><div class="chip">RUNS</div><div class="chip">FAULTS</div><div class="chip">PROTOCOL</div>
+      </div>
+      <div style="flex:1;min-height:0;padding:4px 0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end">
+        <div class="ev">14:22:03  HELLO       protocol v1</div>
+        <div class="ev">14:22:03  PAGE        localhost:5173</div>
+        <div class="ev">14:22:04  TOOLS       6 discovered</div>
+        <div class="ev run">14:21:52  EXEC_OK     get_user               88ms</div>
+        <div class="ev">14:22:18  EXEC_START  search_products</div>
+        <div class="ev run">14:22:24  EXEC_CANCEL search_products</div>
+        <div class="ev rust">14:22:31  PROTO_ERR   unparsable frame — dropped</div>
+        <div class="ev rust">14:22:40  EXEC_FAIL   create_note</div>
+        <div class="ev rust">14:22:52  EXEC_LATE   create_order  +3.2s</div>
+        <div class="ev">14:23:07  EXEC_START  create_order</div>
+        <div class="ev sel">14:23:07  EXEC_OK     create_order          412ms</div>
+      </div>
+    </div>
+
+    <!-- detail of whatever is selected -->
+    <div class="frame" style="flex:1;min-width:0;box-shadow:6px 6px 0 0 #000">
+      <div class="bracket"><span>[ DETAIL ]</span><span>exec_12 · 14:23:07 · 412ms</span></div>
+      <div style="flex:1;min-height:0;padding:12px;overflow:hidden;display:flex;flex-direction:column;gap:12px">
+
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <div>create_order</div><div class="mute">UNTRUSTED OUTPUT</div>
+          <div class="mute" style="margin-left:auto">↺ RERUN&nbsp;&nbsp;⇧↺ EDIT &amp; RERUN</div>
+        </div>
+
+        <div style="display:flex;gap:12px;flex:1;min-height:0">
+          <div style="flex:1;min-width:0">
+            <div class="cap">SENT</div>
+            <div class="pre" style="margin-top:4px">{
+  "priority": "urgent",
+  "items": [
+    "SKU-4471",
+    "SKU-9920"
+  ],
+  "customer": {
+    "name": "Ada Lovelace"
+  }
+}</div>
+          </div>
+          <div style="flex:1;min-width:0;border-left:1px dashed var(--rule);padding-left:12px">
+            <div class="cap">RETURNED</div>
+            <div class="ln" style="width:52%"></div>
+            <div class="ln" style="width:80%"></div>
+            <div class="ln" style="width:64%"></div>
+            <div class="ln" style="width:38%"></div>
+            <div class="ln" style="width:72%"></div>
+            <div class="ln" style="width:46%"></div>
+            <div class="ln" style="width:83%"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- composer stays collapsed until you want it -->
+      <div class="comp">
+        <span class="mute">COMPOSE</span>
+        <span>create_order</span>
+        <span class="mute">4 of 6 set</span>
+        <span style="flex:1"></span>
+        <div class="go">⌘↵ EXECUTE</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mute" style="display:flex;gap:16px;padding:0 4px;flex-shrink:0">
+    <span>⌘K JUMP</span><span>↑↓ HISTORY</span><span>⌘↵ EXECUTE</span><span>↺ RERUN</span><span>/ FILTER</span>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

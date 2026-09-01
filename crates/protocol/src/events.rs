@@ -15,6 +15,11 @@ pub enum EventKind {
     ToolExecutionFinished,
     ToolExecutionFailed,
     Disconnected,
+    /// A result we received but could not apply: it arrived after the execution
+    /// was closed, or names an execution we never started. Recorded, never dropped.
+    LateResult,
+    /// A frame reached us that we could not turn into a `BrowserEvent`.
+    ProtocolError,
 }
 
 impl EventKind {
@@ -27,7 +32,40 @@ impl EventKind {
             Self::ToolExecutionFinished => "TOOL_EXECUTION_FINISHED",
             Self::ToolExecutionFailed => "TOOL_EXECUTION_FAILED",
             Self::Disconnected => "DISCONNECTED",
+            Self::LateResult => "LATE_RESULT",
+            Self::ProtocolError => "PROTOCOL_ERROR",
         }
+    }
+
+    /// Short, lowercase, and never longer than the column that holds it.
+    ///
+    /// The screaming labels above were space-padded to 22 characters, but
+    /// `TOOL_EXECUTION_FINISHED` is 23 — so the message column sat one character
+    /// out of true for the whole life of the old log. These are laid out in a
+    /// fixed column by the view instead, which removes the class of bug.
+    pub fn short(self) -> &'static str {
+        match self {
+            Self::Hello => "hello",
+            Self::PageChanged => "page",
+            Self::ToolsChanged => "tools",
+            Self::ToolExecutionStarted => "started",
+            Self::ToolExecutionFinished => "ok",
+            Self::ToolExecutionFailed => "failed",
+            Self::Disconnected => "gone",
+            Self::LateResult => "late",
+            Self::ProtocolError => "dropped",
+        }
+    }
+
+    /// True for kinds that mean something went wrong on the wire or in a tool.
+    pub fn is_fault(self) -> bool {
+        matches!(
+            self,
+            Self::ToolExecutionFailed
+                | Self::Disconnected
+                | Self::LateResult
+                | Self::ProtocolError
+        )
     }
 }
 
@@ -72,6 +110,11 @@ pub enum BrowserEvent {
         execution_id: ExecutionId,
         error: String,
         duration_ms: u64,
+        timestamp: DateTime<Utc>,
+    },
+    /// A tab went away. Without this the page list only ever grows.
+    PageClosed {
+        page_id: PageId,
         timestamp: DateTime<Utc>,
     },
     Disconnected {
