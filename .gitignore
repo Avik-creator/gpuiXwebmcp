@@ -4,5 +4,6 @@
 .idea
 *.swp
 
-# Seeded design canvas — rebuilt from design/*.dc.html by the design skill
-design/webmcp-debugger-v2.html
+# Working artefacts: the design canvas sources and the page they build.
+# How the interface was designed, not part of the product. Kept locally.
+design/
