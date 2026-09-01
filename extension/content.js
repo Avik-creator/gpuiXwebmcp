@@ -3,7 +3,7 @@
  * Chrome's model-context-tool-inspector does. Do not wrap registerTool.
  */
 
-const LIST_DEBOUNCE_MS = 100;
+const LIST_DEBOUNCE_MS = 200;
 let listTimer = 0;
 
 function hasModelContext() {
@@ -146,10 +146,9 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
   }
   if (message.action === "LIST_TOOLS") {
     watchTools();
-    listTools()
-      .then(() => reply({ ok: true }))
-      .catch((error) => reply({ ok: false, error: String(error.message || error) }));
-    return true;
+    debouncedListTools();
+    reply({ ok: true });
+    return;
   }
   if (message.action === "EXECUTE_TOOL") {
     executeNamedTool(message.name, message.arguments)

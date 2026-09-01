@@ -235,8 +235,8 @@ function Home() {
           <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
             Clone the repo, then{" "}
             <code className="font-mono text-foreground">cargo run -p debugger</code>
-            . Click the status pill for Fixture. Load the extension when you
-            want a live tab.
+            . Click the status pill for Demo. Load the extension when you
+            want a Chrome tab.
           </p>
           <a
             href={GITHUB}

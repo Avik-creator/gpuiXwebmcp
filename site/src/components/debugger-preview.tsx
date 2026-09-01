@@ -23,7 +23,7 @@ export function DebuggerPreview() {
           <p className="text-sm">WebMCP Debugger</p>
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="size-2 rounded-full bg-accent" aria-hidden="true" />
-            Fixture
+            Demo
           </p>
         </div>
         <div className="flex items-center gap-2 border-t border-border px-4 py-2">

@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::ids::{ExecutionId, PageId};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Page {
     pub id: PageId,
     pub url: String,
@@ -11,7 +11,7 @@ pub struct Page {
     pub origin: String,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ToolAnnotations {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub read_only_hint: Option<bool>,
@@ -19,7 +19,7 @@ pub struct ToolAnnotations {
     pub untrusted_content_hint: Option<bool>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Tool {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
