@@ -46,6 +46,56 @@ impl Raw {
     pub fn list_len(&self, path: &str) -> usize {
         self.lists.get(path).copied().unwrap_or(1)
     }
+
+    /// Remove row `dropped` of `list`, renumbering every path behind it.
+    /// Nested objects, booleans and choices move too, not just plain text rows.
+    pub fn drop_row(&mut self, list: &str, dropped: usize) {
+        let count = self.list_len(list);
+        if dropped >= count {
+            return;
+        }
+        self.text = rekey_map(std::mem::take(&mut self.text), list, dropped);
+        self.bools = rekey_map(std::mem::take(&mut self.bools), list, dropped);
+        self.choices = rekey_map(std::mem::take(&mut self.choices), list, dropped);
+        self.lists = rekey_map(std::mem::take(&mut self.lists), list, dropped);
+        self.open = std::mem::take(&mut self.open)
+            .iter()
+            .filter_map(|path| rekey_after_drop(path, list, dropped))
+            .collect();
+        self.lists.insert(list.to_string(), count - 1);
+    }
+}
+
+/// Where `key` lands once row `dropped` of `list` is gone: `None` for the row
+/// itself, renumbered for rows behind it, untouched for everything else.
+pub fn rekey_after_drop(key: &str, list: &str, dropped: usize) -> Option<String> {
+    let unchanged = Some(key.to_string());
+    let Some(rest) = key.strip_prefix(list).and_then(|rest| rest.strip_prefix('[')) else {
+        return unchanged;
+    };
+    let Some((digits, tail)) = rest.split_once(']') else {
+        return unchanged;
+    };
+    let Ok(index) = digits.parse::<usize>() else {
+        return unchanged;
+    };
+    if !(tail.is_empty() || tail.starts_with('.') || tail.starts_with('[')) {
+        return unchanged;
+    }
+    if index == dropped {
+        return None;
+    }
+    if index > dropped {
+        return Some(format!("{list}[{}]{tail}", index - 1));
+    }
+    unchanged
+}
+
+/// `rekey_after_drop` over a whole map, dropping the removed row's entries.
+pub fn rekey_map<V>(map: BTreeMap<String, V>, list: &str, dropped: usize) -> BTreeMap<String, V> {
+    map.into_iter()
+        .filter_map(|(key, value)| rekey_after_drop(&key, list, dropped).map(|key| (key, value)))
+        .collect()
 }
 
 pub fn child_path(prefix: &str, name: &str) -> String {
@@ -387,6 +437,47 @@ mod tests {
         let paths = ordered_paths(&fields(), &raw, "");
         assert!(!paths.contains(&"priority".to_string()), "a choice has no text field");
         assert!(!paths.contains(&"gift_wrap".to_string()), "a boolean has no text field");
+    }
+
+    #[test]
+    fn dropping_a_row_renumbers_everything_behind_it() {
+        let mut raw = Raw::default();
+        raw.lists.insert("items".into(), 3);
+        raw.text.insert("items[0].name".into(), "a".into());
+        raw.text.insert("items[1].name".into(), "b".into());
+        raw.text.insert("items[2].name".into(), "c".into());
+        raw.bools.insert("items[2].gift".into(), true);
+        raw.choices.insert("items[1].tier".into(), 1);
+        raw.lists.insert("items[2].tags".into(), 4);
+        raw.open.insert("items[2]".into());
+        raw.text.insert("items2[0]".into(), "keep".into());
+
+        raw.drop_row("items", 0);
+
+        assert_eq!(raw.list_len("items"), 2);
+        assert_eq!(raw.text.get("items[0].name").map(String::as_str), Some("b"));
+        assert_eq!(raw.text.get("items[1].name").map(String::as_str), Some("c"));
+        assert!(!raw.text.contains_key("items[2].name"));
+        assert_eq!(raw.bools.get("items[1].gift"), Some(&true));
+        assert_eq!(raw.choices.get("items[0].tier"), Some(&1));
+        assert_eq!(raw.list_len("items[1].tags"), 4);
+        assert!(raw.is_open("items[1]"));
+        assert_eq!(
+            raw.text.get("items2[0]").map(String::as_str),
+            Some("keep"),
+            "a list whose name merely starts the same is not touched"
+        );
+    }
+
+    #[test]
+    fn dropping_the_last_row_or_a_missing_one_is_safe() {
+        let mut raw = Raw::default();
+        raw.text.insert("items[0]".into(), "only".into());
+        raw.drop_row("items", 5);
+        assert_eq!(raw.list_len("items"), 1, "out of range must not touch anything");
+        raw.drop_row("items", 0);
+        assert_eq!(raw.list_len("items"), 0);
+        assert!(raw.text.is_empty());
     }
 
     #[test]

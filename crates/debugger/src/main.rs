@@ -126,12 +126,15 @@ enum Source {
 
 struct PendingExecution {
     id: ExecutionId,
+    /// The tab the run went to, so a cancel reaches it even after you switch pages.
+    page_id: Option<PageId>,
 }
 
 struct Debugger {
     state: DebuggerState,
     form: schema::Form,
     form_schema: Value,
+    form_tool: Option<String>,
     raw: form::Raw,
     inputs: BTreeMap<String, Entity<TextInput>>,
     compose_editing: bool,
@@ -187,6 +190,7 @@ impl Debugger {
             state: DebuggerState::waiting_for_extension(),
             form: schema::Form::Raw { reason: "no tool".into() },
             form_schema: Value::Null,
+            form_tool: None,
             raw: form::Raw::default(),
             inputs: BTreeMap::new(),
             compose_editing: true,
@@ -609,7 +613,10 @@ impl Debugger {
             started_at: Utc::now(),
             finished_at: None,
         });
-        self.pending = Some(PendingExecution { id: id.clone() });
+        self.pending = Some(PendingExecution {
+            id: id.clone(),
+            page_id: self.state.selected_page.clone(),
+        });
         self.compose_editing = false;
         self.comparing = false;
         self.navigate(Place::Compose);
@@ -701,19 +708,19 @@ impl Debugger {
         cx.notify();
     }
 
-    /// Rebuild only when the schema actually changed.
-    ///
-    /// The old path rebuilt on *any* `tools_changed` for the selected page, so a
-    /// background refresh silently wiped whatever you were typing.
+    /// Rebuild only when the tool or its schema actually changed.
+    /// A background refresh must not wipe typing; two same-shaped tools must not share a form.
     fn rebuild_form(&mut self, cx: &mut Context<Self>) {
+        let tool = self.state.selected_tool.clone();
         let schema = self
             .state
             .selected_tool()
             .map(|tool| tool.input_schema.clone())
             .unwrap_or(Value::Null);
-        if schema == self.form_schema {
+        if schema == self.form_schema && tool == self.form_tool {
             return;
         }
+        self.form_tool = tool;
         self.form_schema = schema.clone();
         self.form = schema::form_from_schema(&schema);
         self.raw = form::Raw::default();
@@ -776,27 +783,16 @@ impl Debugger {
         errors
     }
 
+    /// Widgets move with their rows: everything behind the removed one is
+    /// renumbered, nested paths included, and the row's own widgets are dropped.
     fn drop_list_row(&mut self, path: &str, index: usize, cx: &mut Context<Self>) {
-        let count = self.raw.list_len(path);
-        if count == 0 {
+        if index >= self.raw.list_len(path) {
             return;
         }
-        // Shift the text of every row after the removed one down by one, so the
-        // values move with the rows rather than the row indices.
-        for slot in index..count.saturating_sub(1) {
-            let next = self.inputs.get(&format!("{path}[{}]", slot + 1)).cloned();
-            match next {
-                Some(entity) => {
-                    let text = entity.read(cx).text();
-                    if let Some(current) = self.inputs.get(&format!("{path}[{slot}]")) {
-                        current.update(cx, |input, cx| input.set_text_notify(text, cx));
-                    }
-                }
-                None => break,
-            }
-        }
-        self.inputs.remove(&format!("{path}[{}]", count - 1));
-        self.raw.lists.insert(path.to_string(), count - 1);
+        // Live text lives in the widgets; fold it in before anything renumbers.
+        self.raw = self.snapshot_raw(cx);
+        self.raw.drop_row(path, index);
+        self.inputs = form::rekey_map(std::mem::take(&mut self.inputs), path, index);
         self.compose_editing = true;
         cx.notify();
     }
@@ -818,10 +814,14 @@ impl Debugger {
     /// Where it does not, the tab keeps going and only we stop waiting — so the
     /// recorded reason says so rather than claiming the tool stopped.
     fn cancel_execution(&mut self, cx: &mut Context<Self>) {
-        let Some(id) = self.pending.as_ref().map(|pending| pending.id.clone()) else {
+        let Some((id, page_id)) = self
+            .pending
+            .as_ref()
+            .map(|pending| (pending.id.clone(), pending.page_id.clone()))
+        else {
             return;
         };
-        let asked = match (&self.bridge, self.state.selected_page.clone()) {
+        let asked = match (&self.bridge, page_id) {
             (Some(bridge), Some(page_id)) if self.source == Source::Chrome => {
                 bridge.send(&DebuggerCommand::CancelExecution {
                     page_id,
@@ -856,10 +856,16 @@ impl Debugger {
             .map(|page| PageHit {
                 id: page.id.as_str().to_string(),
                 origin: page.origin.clone(),
+                // Every page's tools are cached, so no site is "0 tools" merely
+                // because you are not looking at it.
                 tools: if Some(&page.id) == self.state.selected_page.as_ref() {
                     self.state.tools.len()
                 } else {
-                    0
+                    self.state
+                        .tools_by_page
+                        .get(page.id.as_str())
+                        .map(Vec::len)
+                        .unwrap_or(0)
                 },
             })
             .collect();

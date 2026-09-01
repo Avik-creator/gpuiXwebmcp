@@ -75,7 +75,7 @@ Cancel is `⌘.` rather than `⌃C` because `⌃C` is already Copy inside a text
 ## Tests
 
 ```sh
-cargo test --workspace && node extension/content.test.mjs
+cargo test --workspace && node extension/content.test.mjs && node extension/background.test.mjs
 ```
 
 The second one loads the content script the way Chrome does and runs it. A

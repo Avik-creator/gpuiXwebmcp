@@ -113,11 +113,27 @@ pub enum BrowserEvent {
         timestamp: DateTime<Utc>,
     },
     /// A tab went away. Without this the page list only ever grows.
+    /// The extension did not always stamp this one, so a missing time is now.
     PageClosed {
         page_id: PageId,
+        #[serde(default = "Utc::now")]
         timestamp: DateTime<Utc>,
     },
     Disconnected {
         timestamp: DateTime<Utc>,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn page_closed_without_a_timestamp_still_parses() {
+        // The extension sent `page_closed` bare, so every tab close was logged
+        // as a protocol error and the page list never shrank.
+        let event: BrowserEvent =
+            serde_json::from_str(r#"{"type":"page_closed","page_id":"tab:4"}"#).unwrap();
+        assert!(matches!(event, BrowserEvent::PageClosed { page_id, .. } if page_id.as_str() == "tab:4"));
+    }
 }

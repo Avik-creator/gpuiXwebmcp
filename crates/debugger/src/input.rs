@@ -339,7 +339,9 @@ impl TextInput {
 
     fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-            self.replace_text_in_range(None, &text.replace('\n', " "), window, cx);
+            // One line only, and "\r\n" must not leave a stray "\r" behind.
+            let flat = text.replace("\r\n", " ").replace(['\r', '\n'], " ");
+            self.replace_text_in_range(None, &flat, window, cx);
         }
     }
 

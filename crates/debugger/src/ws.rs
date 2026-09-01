@@ -20,6 +20,13 @@ use webmcp_protocol::{BrowserEvent, DebuggerCommand, WS_HOST, WS_PORT};
 /// Comfortably inside Chrome's ~30s service-worker idle timeout.
 pub const HEARTBEAT: Duration = Duration::from_secs(20);
 
+/// How long a read waits before the pump checks for outgoing commands.
+const READ_POLL: Duration = Duration::from_millis(15);
+
+/// Loopback only, and Chrome drains sockets even while the worker sleeps, so a
+/// send buffer that stays full this long means nobody is reading.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Stable unpacked extension id (from `extension/manifest.json` `key`).
 pub const EXTENSION_ID: &str = "ffaihbpimepkgggjclheahfddigmmfeg";
 
@@ -230,7 +237,10 @@ fn handle_connection(stream: TcpStream, hub: Arc<Hub>) -> Result<(), Box<dyn std
     let peer = stream.peer_addr()?;
     let mut socket = accept_hdr(stream, origin_callback)
         .map_err(|error| format!("handshake from {peer} rejected: {error}"))?;
-    socket.get_mut().set_nonblocking(true)?;
+    // Blocking with timeouts: a large frame on a non-blocking socket hit
+    // WouldBlock mid-write, and that dropped the whole connection.
+    socket.get_mut().set_read_timeout(Some(READ_POLL))?;
+    socket.get_mut().set_write_timeout(Some(WRITE_TIMEOUT))?;
 
     let (tx, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
     let id = hub.register(tx);
@@ -295,9 +305,9 @@ fn pump_connection(
                     raw: String::new(),
                 });
             }
-            Err(tungstenite::Error::Io(error)) if error.kind() == ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(15));
-            }
+            // The read timeout fired: nothing arrived, go send what is queued.
+            Err(tungstenite::Error::Io(error))
+                if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
             Err(tungstenite::Error::ConnectionClosed) => break,
             Err(error) => return Err(error.into()),
         }
@@ -583,6 +593,51 @@ mod tests {
             "a write failure must not leave the client registered"
         );
         assert_eq!(writer.client_count(), 0);
+    }
+
+    #[test]
+    fn a_large_command_reaches_the_client_intact() {
+        // A big `execute_tool` payload used to hit WouldBlock on the
+        // non-blocking socket, and the error path dropped the whole connection.
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("ephemeral bind");
+        let port = listener.local_addr().unwrap().port();
+        let hub = Hub::new(None, false);
+        let writer = Arc::clone(&hub);
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept");
+            let _ = handle_connection(stream, hub);
+        });
+
+        let stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        let request = http::Request::builder()
+            .method("GET")
+            .uri(format!("ws://127.0.0.1:{port}/"))
+            .header("Host", format!("127.0.0.1:{port}"))
+            .header("Connection", "Upgrade")
+            .header("Upgrade", "websocket")
+            .header("Sec-WebSocket-Version", "13")
+            .header(
+                "Sec-WebSocket-Key",
+                tungstenite::handshake::client::generate_key(),
+            )
+            .header("Origin", allowed_extension_origin())
+            .body(())
+            .unwrap();
+        let (mut socket, _) = tungstenite::client::client(request, stream).expect("handshake");
+
+        while writer.client_count() == 0 {
+            thread::sleep(Duration::from_millis(1));
+        }
+        // Far larger than any loopback socket buffer, so a single write cannot
+        // take all of it at once.
+        let payload = format!("{{\"type\":\"execute_tool\",\"arguments\":\"{}\"}}", "y".repeat(4 * 1024 * 1024));
+        assert!(writer.send_one(&payload));
+
+        let received = socket.read().expect("the connection must survive a large frame");
+        assert_eq!(received.to_text().unwrap(), payload);
+        socket.close(None).ok();
+        while socket.read().is_ok() {}
+        server.join().expect("server thread");
     }
 
     #[test]

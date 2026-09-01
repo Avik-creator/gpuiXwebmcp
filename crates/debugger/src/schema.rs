@@ -9,10 +9,26 @@
 use serde_json::{Map, Value};
 
 fn is_object_schema(root: &Map<String, Value>) -> bool {
-    match root.get("type") {
-        None => root.contains_key("properties"),
-        Some(Value::String(kind)) => kind == "object",
-        Some(_) => false,
+    if !root.contains_key("type") {
+        return root.contains_key("properties");
+    }
+    declared_type(root) == Some("object")
+}
+
+/// The declared type, with `["string", "null"]` reading as `string`.
+fn declared_type(obj: &Map<String, Value>) -> Option<&str> {
+    match obj.get("type")? {
+        Value::String(kind) => Some(kind.as_str()),
+        Value::Array(kinds) => {
+            let mut named = kinds
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|kind| *kind != "null");
+            let first = named.next()?;
+            // Two real types is a union, and a union has no single widget.
+            named.next().is_none().then_some(first)
+        }
+        _ => None,
     }
 }
 
@@ -170,7 +186,7 @@ fn kind_of(schema: &Value) -> Kind {
         }
         return Kind::Choice { options: options.clone() };
     }
-    let declared = obj.get("type").and_then(Value::as_str);
+    let declared = declared_type(obj);
     match declared {
         Some("string") => Kind::Text {
             format: obj.get("format").and_then(Value::as_str).map(str::to_string),
@@ -410,6 +426,23 @@ mod tests {
         assert!(name.required);
         assert_eq!(name.description.as_deref(), Some("Full name"));
         assert!(matches!(fields.iter().find(|f| f.name == "tier").unwrap().kind, Kind::Choice { .. }));
+    }
+
+    #[test]
+    fn a_nullable_type_keeps_its_widget() {
+        // `["string", "null"]` is how most generators spell "optional"; it used
+        // to read as no type at all and fall back to a raw JSON box.
+        let form = form_from_schema(&serde_json::json!({
+            "type": ["object", "null"],
+            "properties": {
+                "note": { "type": ["string", "null"] },
+                "count": { "type": ["null", "integer"], "minimum": 0 },
+                "either": { "type": ["string", "number"] }
+            }
+        }));
+        assert!(matches!(field(&form, "note").kind, Kind::Text { .. }));
+        assert!(matches!(field(&form, "count").kind, Kind::Integer { min: Some(0), .. }));
+        assert!(field(&form, "either").kind.is_raw(), "a real union has no single widget");
     }
 
     #[test]

@@ -82,29 +82,7 @@ function connect() {
   });
 
   socket.addEventListener("close", () => {
-    scheduleRe// Chrome evicts an idle service worker after about 30 seconds, which closes the
-// socket and leaves the debugger seeing nothing. Two defences: the debugger
-// pings us well inside that window, and this alarm revives us if we are evicted
-// anyway — an alarm firing starts the worker back up.
-const KEEPALIVE_ALARM = "webmcp-keepalive";
-
-chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === KEEPALIVE_ALARM) {
-    connect();
-  }
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  connect();
-});
-
-chrome.runtime.onInstalled.addListener(() => {
-  connect();
-});
-
-connect();
+    scheduleReconnect();
   });
 
   socket.addEventListener("error", () => {
@@ -364,7 +342,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  sendEvent({ type: "page_closed", page_id: pageIdForTab(tabId) });
+  sendEvent({ type: "page_closed", page_id: pageIdForTab(tabId), timestamp: isoNow() });
 });
 
 chrome.tabs.onActivated.addListener((info) => {
@@ -375,6 +353,28 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "complete") {
     requestTools(tabId).catch(() => {});
   }
+});
+
+// Chrome evicts an idle service worker after about 30 seconds, which closes the
+// socket and leaves the debugger seeing nothing. Two defences: the debugger
+// pings us well inside that window, and this alarm revives us if we are evicted
+// anyway — an alarm firing starts the worker back up.
+const KEEPALIVE_ALARM = "webmcp-keepalive";
+
+chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === KEEPALIVE_ALARM) {
+    connect();
+  }
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  connect();
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  connect();
 });
 
 connect();

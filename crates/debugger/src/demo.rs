@@ -165,6 +165,15 @@ fn serve(mut stream: TcpStream, root: &Path) -> std::io::Result<()> {
     let mut request = String::new();
     reader.read_line(&mut request)?;
 
+    // Drain the headers: closing a socket with unread bytes makes the kernel
+    // send RST, and the browser may then throw away the response it already had.
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line)? == 0 || line == "\r\n" || line == "\n" {
+            break;
+        }
+    }
+
     let mut parts = request.split_whitespace();
     let method = parts.next().unwrap_or("");
     let target = parts.next().unwrap_or("");
