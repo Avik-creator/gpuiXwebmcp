@@ -3,3 +3,6 @@
 .DS_Store
 .idea
 *.swp
+
+# Seeded design canvas — rebuilt from design/*.dc.html by the design skill
+design/webmcp-debugger-v2.html

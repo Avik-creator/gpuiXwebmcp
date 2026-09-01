@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root {
+      --paper:  #0A0A0A;
+      --ink:    #E6E1D3;
+      --mute:   #8A8577;
+      --hair:   #2A2724;
+      --accent: #C45C3A;
+      --mono: Menlo, "SF Mono", "JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+    }
+    body { margin: 0; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .win {
+      width: 1200px; box-sizing: border-box;
+      background: var(--paper); color: var(--ink);
+      font-family: var(--mono); font-size: 13px; line-height: 22px;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .bar {
+      height: 56px; flex-shrink: 0; display: flex; align-items: center;
+      justify-content: space-between; padding: 0 40px;
+      font-size: 10px; line-height: 14px; letter-spacing: 0.12em; color: var(--mute);
+    }
+    .stage { flex: 1; min-height: 0; display: flex; justify-content: center; overflow: hidden; }
+    .col { width: 640px; padding-top: 96px; }
+    .lbl { font-size: 10px; line-height: 14px; letter-spacing: 0.12em; color: var(--mute); }
+    .focus { font-size: 22px; line-height: 30px; }
+    .mute { color: var(--mute); }
+    .accent { color: var(--accent); }
+    .field { padding-bottom: 7px; border-bottom: 1px solid var(--hair); }
+    .field + .field { margin-top: 32px; }
+    .val { margin-top: 8px; }
+    .opt { color: var(--mute); margin-right: 20px; }
+    .opt.on { color: var(--ink); }
+    .act { display: inline-block; margin-top: 64px; padding-bottom: 7px; border-bottom: 1px solid var(--ink); }
+    .act.ghost { border-bottom-color: var(--hair); color: var(--mute); margin-left: 40px; }
+    .pre { white-space: pre; }
+    .item { margin-bottom: 24px; }
+    .item .nm { display: flex; justify-content: space-between; align-items: baseline; }
+    .caret { display: inline-block; width: 7px; height: 16px; background: var(--ink); vertical-align: -3px; }
+    .spec { display: flex; align-items: baseline; margin-bottom: 28px; }
+    .spec .k { width: 140px; flex-shrink: 0; }
+    .cov { display: flex; gap: 64px; }
+    .cov ul { list-style: none; margin: 0; padding: 0; width: 480px; }
+    .cov li { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 6px; }
+    .cov h4 { font-size: 10px; line-height: 14px; letter-spacing: 0.12em; color: var(--mute);
+              font-weight: normal; margin: 28px 0 12px 0; }
+    .cov h4:first-child { margin-top: 0; }
+  </style>
+</helmet>
+
+<div class="win" style="height:800px">
+  <div class="bar"><span style="display:flex;gap:28px"><span>SURVEY</span><span>COMPOSE</span><span style="color:var(--ink)">RECORD</span></span><span>localhost:5173 &nbsp;·&nbsp; <span>LIVE · 1</span></span></div>
+  <div class="stage">
+    <div class="col" style="padding-top:64px">
+      <div style="display:flex;gap:24px" class="lbl">
+        <span>RUNS</span><span style="color:var(--ink)">EVERYTHING</span>
+        <span style="margin-left:auto">348 EVENTS · KEEPING THE LAST 2,000</span>
+      </div>
+      <div style="margin-top:40px">
+<div style="display:flex;margin-bottom:14px"><span class="mute" style="width:80px;flex-shrink:0">14:22:03</span><span class="mute" style="width:96px;flex-shrink:0">hello</span><span class="mute" style="flex:1">extension protocol v1</span></div><div style="display:flex;margin-bottom:14px"><span class="mute" style="width:80px;flex-shrink:0">14:22:03</span><span class="mute" style="width:96px;flex-shrink:0">page</span><span class="mute" style="flex:1">http://localhost:5173/</span></div><div style="display:flex;margin-bottom:14px"><span class="mute" style="width:80px;flex-shrink:0">14:22:04</span><span class="mute" style="width:96px;flex-shrink:0">tools</span><span class="mute" style="flex:1">6 discovered</span></div><div style="display:flex;margin-bottom:14px"><span class="mute" style="width:80px;flex-shrink:0">14:22:31</span><span class="mute" style="width:96px;flex-shrink:0">started</span><span class="mute" style="flex:1">get_user { }</span></div><div style="display:flex;margin-bottom:14px"><span class="mute" style="width:80px;flex-shrink:0">14:22:31</span><span class="mute" style="width:96px;flex-shrink:0">ok</span><span class="mute" style="flex:1">get_user · 88ms</span></div><div style="display:flex;margin-bottom:14px"><span class="mute" style="width:80px;flex-shrink:0">14:22:40</span><span class="mute" style="width:96px;flex-shrink:0">failed</span><span class="accent" style="flex:1">create_note · text is required</span></div><div style="display:flex;margin-bottom:14px"><span class="mute" style="width:80px;flex-shrink:0">14:22:52</span><span class="mute" style="width:96px;flex-shrink:0">late</span><span class="accent" style="flex:1">create_order · arrived 3.2s after it timed out</span></div><div style="display:flex;margin-bottom:8px"><span class="mute" style="width:80px;flex-shrink:0">14:23:01</span><span class="mute" style="width:96px;flex-shrink:0">dropped</span><span class="accent" style="flex:1">a frame arrived that could not be parsed &nbsp;⌄</span></div><div class="pre mute" style="margin:0 0 14px 176px;padding-left:16px;border-left:1px solid var(--hair)">{
+  &quot;type&quot;: &quot;tool_execution_finished&quot;,
+  &quot;execution_id&quot;: &quot;exec_11&quot;,
+  &quot;duration_ms&quot;: &quot;412&quot;   ← string, expected number
+}</div><div style="display:flex;margin-bottom:14px"><span class="mute" style="width:80px;flex-shrink:0">14:23:07</span><span class="mute" style="width:96px;flex-shrink:0">started</span><span class="mute" style="flex:1">create_order { priority: urgent … }</span></div><div style="display:flex;margin-bottom:14px"><span class="mute" style="width:80px;flex-shrink:0">14:23:07</span><span class="mute" style="width:96px;flex-shrink:0">ok</span><span class="mute" style="flex:1">create_order · 412ms</span></div>      </div>
+      <div class="lbl" style="margin-top:40px">FOLLOWING &nbsp;·&nbsp; ↵ EXPAND A FRAME</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
