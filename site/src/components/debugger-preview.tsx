@@ -1,99 +1,47 @@
 const TOOLS = [
-  { name: "get_user", title: "Get user", badge: "read-only", selected: false },
-  { name: "search_products", title: "Search products", badge: "read-only", selected: true },
-  { name: "create_note", title: "Create note", badge: "untrusted", selected: false },
+  { name: "get_user", access: "Only reads", mutates: false, blurb: "Return the current demo user profile", selected: false },
+  { name: "search_products", access: "Only reads", mutates: false, blurb: "Search products by query", selected: true },
+  { name: "create_note", access: "Can change things", mutates: true, blurb: "Create a note from text", selected: false },
 ] as const;
 
-const LOG = [
-  "17:54:01  HELLO  fixture backend ready",
-  "17:54:02  PAGE_CHANGED  http://localhost:5173/",
-  "17:54:02  TOOLS_CHANGED  discovered 3 tools",
-  "17:54:09  TOOL_EXECUTION_STARTED  search_products",
-  "17:54:09  TOOL_EXECUTION_FINISHED  search_products 112ms",
-] as const;
-
+/** The window as it is: a bar, then the Tools screen in one quiet column. */
 export function DebuggerPreview() {
   return (
-    <figure className="overflow-hidden rounded-xl border border-border bg-background shadow-[0_0_40px_rgba(0,0,0,0.8)]">
+    <figure className="m-0 border border-hair bg-paper">
       <figcaption className="sr-only">
-        Mock of the WebMCP Debugger window: site field, pages, tools, inspector, and event log.
+        The debugger window: the bar with Tools, Run and History, then the list of tools the page offers.
       </figcaption>
-      <div className="border-b border-border bg-card">
-        <div className="flex items-center justify-between px-4 py-3">
-          <p className="text-sm">WebMCP Debugger</p>
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="size-2 rounded-full bg-accent" aria-hidden="true" />
-            Fixture
-          </p>
-        </div>
-        <div className="flex items-center gap-2 border-t border-border px-4 py-2">
-          <p className="text-sm text-muted-foreground">SITE</p>
-          <p className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm">
-            http://localhost:5173
-          </p>
-          <p className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent">GO</p>
-        </div>
+      <div className="flex h-14 items-center justify-between gap-4 px-6">
+        <p className="t-label m-0 flex items-center gap-5">
+          <span className="text-hair">‹ BACK</span>
+          <span className="text-hair">›</span>
+          <span className="text-ink">TOOLS</span>
+          <span>RUN</span>
+          <span>HISTORY</span>
+        </p>
+        <p className="t-label m-0 hidden min-w-0 items-center gap-2 sm:flex">
+          <span className="truncate">http://localhost:5173</span>
+          <span>·</span>
+          <span>Chrome connected</span>
+        </p>
       </div>
-      <div className="grid min-h-[22rem] grid-cols-1 md:grid-cols-[11rem_13rem_1fr]">
-        <section className="border-b border-border md:border-b-0 md:border-r" aria-label="Pages">
-          <h3 className="border-b border-border px-4 py-2 text-sm text-muted-foreground">Pages</h3>
-          <div className="p-2">
-            <div className="rounded-md bg-selected px-3 py-2">
-              <p className="flex items-center gap-2 text-sm">
-                <span className="size-1.5 rounded-full bg-accent" aria-hidden="true" />
-                http://localhost:5173
-              </p>
-              <p className="pl-4 text-sm text-muted-foreground">WebMCP demo</p>
-            </div>
-          </div>
-        </section>
-        <section className="border-b border-border md:border-b-0 md:border-r" aria-label="Tools">
-          <h3 className="border-b border-border px-4 py-2 text-sm text-muted-foreground">Tools</h3>
-          <ul className="flex flex-col gap-1 p-2">
-            {TOOLS.map((tool) => (
-              <li
-                key={tool.name}
-                className={`rounded-md px-3 py-2 ${tool.selected ? "bg-selected" : "bg-card"}`}
-              >
-                <p className="font-mono text-sm">{tool.name}</p>
-                <p className="text-sm text-muted-foreground">{tool.title}</p>
-                <p className="text-sm text-muted-foreground">{tool.badge}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section aria-label="Inspector">
-          <h3 className="border-b border-border px-4 py-2 text-sm text-muted-foreground">Inspector</h3>
-          <div className="flex flex-col gap-3 p-4">
-            <p className="font-mono text-sm">search_products</p>
-            <p className="text-sm text-muted-foreground">Search products by query</p>
-            <div>
-              <p className="mb-1 text-sm text-muted-foreground">query *</p>
-              <p className="rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm">gpui</p>
-            </div>
-            <p className="flex min-h-11 items-center justify-center rounded-md bg-accent text-sm font-medium text-on-accent">
-              Execute
-            </p>
-            <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs leading-5 text-foreground">
-{`{
-  "query": "gpui",
-  "results": [
-    { "title": "Programming GPUI" },
-    { "title": "WebMCP in Practice" }
-  ]
-}`}
-            </pre>
-          </div>
-        </section>
-      </div>
-      <section className="border-t border-border bg-card" aria-label="Event log">
-        <h3 className="border-b border-border px-4 py-2 text-sm text-muted-foreground">Event Log</h3>
-        <ul className="space-y-1 px-4 py-3 font-mono text-xs text-muted-foreground">
-          {LOG.map((line) => (
-            <li key={line}>{line}</li>
+      <div className="px-6 pb-10 pt-8 sm:px-12">
+        <p className="t-label m-0">Open a site</p>
+        <div className="mt-2 flex items-center justify-between gap-4 border-b border-hair pb-2">
+          <span className="min-w-0 flex-1 truncate border border-dashed border-hair px-3 py-2">http://localhost:5173</span>
+          <span className="t-label text-ink">OPEN</span>
+        </div>
+        <ul className="m-0 mt-10 list-none p-0">
+          {TOOLS.map((tool) => (
+            <li key={tool.name} className="mb-6">
+              <p className="m-0">{tool.selected ? `${tool.name} ›` : tool.name}</p>
+              <p className="m-0 text-mute">{tool.blurb}</p>
+              <p className={`t-label m-0 mt-1 ${tool.mutates ? "text-accent" : ""}`}>{tool.access}</p>
+            </li>
           ))}
         </ul>
-      </section>
+        <p className="t-label m-0 mt-2">Try the playground &nbsp;⌃T</p>
+      </div>
     </figure>
   );
 }

@@ -24,24 +24,24 @@ const steps = [
   {
     n: "1",
     title: "Native window first",
-    body: "GPUI lists pages and tools against a fixture. Execute works with no Chrome. If the window is wrong, the extension cannot save it.",
+    body: "GPUI lists pages and tools against built-in sample data. Run works with no Chrome. If the window is wrong, the extension cannot save it.",
   },
   {
     n: "2",
     title: "Same three tools on a page",
-    body: "A vanilla demo site registers get_user, search_products, and create_note. Same JSON the fixture returns.",
+    body: "A vanilla demo site registers get_user, search_products, and create_note. Same JSON the playground returns.",
   },
   {
     n: "3",
     title: "Then the live tab",
-    body: "A small Chrome extension pipes document.modelContext over localhost WebSocket. The same inspector Execute hits the real page.",
+    body: "A small Chrome extension pipes document.modelContext over a localhost socket. The same Run hits the real page.",
   },
 ] as const;
 
 const faqs = [
   {
     q: "Is this an AI agent?",
-    a: "No. It is a debugger. You choose the tool and click Execute. There is no model in the loop, and no allow/reject gate.",
+    a: "No. It is a debugger. You choose the tool and press Run. There is no model in the loop, and no allow/reject gate.",
   },
   {
     q: "Can I leave the extension on while I browse?",
@@ -53,198 +53,154 @@ const faqs = [
   },
 ] as const;
 
+function Rule({ children }: { children: string }) {
+  return <p className="t-label m-0 border-b border-hair pb-2">{children}</p>;
+}
+
 function Home() {
   return (
-    <main id="main">
-      <section className="mx-auto grid max-w-6xl gap-12 px-4 py-14 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center lg:py-20">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
-            Native inspector · local-dev
-          </p>
-          <h1 className="mt-3 max-w-xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-            See what a page can do — in a native window.
-          </h1>
-          <p className="mt-4 max-w-xl text-lg text-muted-foreground">
-            gpuiXwebmcp lists WebMCP tools, lets you fill a form, click Execute,
-            and read the result plus an event log. It is a developer tool, not
-            an autonomous browser agent.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a
-              href={GITHUB}
-              className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:opacity-90 transition-opacity duration-200 cursor-pointer"
-            >
-              View the repo
-            </a>
-            <Link
-              to="/"
-              hash="what"
-              className="inline-flex min-h-11 items-center rounded-md border border-border bg-muted px-4 text-sm font-medium text-foreground hover:bg-selected transition-colors duration-200 cursor-pointer"
-            >
-              What we are building
-            </Link>
-          </div>
-        </div>
+    <main id="main" className="mx-auto max-w-[640px] px-6 pb-16 pt-24 sm:px-0">
+      <p className="t-label m-0">Native inspector · local-dev</p>
+      <h1 className="t-hero m-0 mt-2 font-normal text-balance">
+        See what a page can do, in a native window.
+      </h1>
+      <p className="mt-6 text-mute">
+        gpuiXwebmcp lists a site’s WebMCP tools, lets you fill in one, press
+        Run, and read the result plus a record of everything that happened. It
+        is a developer tool, not an autonomous browser agent.
+      </p>
+      <p className="mt-6 flex flex-wrap items-center gap-8">
+        <Link to="/try" className="act">
+          Try WebMCP in this browser ›
+        </Link>
+        <a href={GITHUB} className="act">
+          View the repo ›
+        </a>
+      </p>
+
+      <div className="mt-14">
         <DebuggerPreview />
+      </div>
+
+      <section className="mt-16" aria-labelledby="pain-heading">
+        <h2 id="pain-heading" className="t-label m-0 border-b border-hair pb-2 font-normal">
+          The pain is simple
+        </h2>
+        <p className="mt-4 text-mute">
+          Web pages are starting to expose tools. You still need a place to look
+          at them that is not a chatbot.
+        </p>
+        <ul className="m-0 mt-6 list-none p-0">
+          {pain.map((item) => (
+            <li key={item.title} className="mb-6">
+              <p className="m-0">{item.title}</p>
+              <p className="m-0 text-mute">{item.body}</p>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      <section className="border-t border-border bg-card py-16" aria-labelledby="pain-heading">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <h2 id="pain-heading" className="text-2xl font-semibold">
-            The pain is simple
-          </h2>
-          <p className="mt-2 max-w-2xl text-muted-foreground">
-            Web pages are starting to expose tools. You still need a place to
-            look at them that is not a chatbot.
-          </p>
-          <ul className="mt-8 grid gap-4 md:grid-cols-3">
-            {pain.map((item) => (
-              <li key={item.title} className="rounded-xl border border-border bg-background p-5">
-                <h3 className="font-medium">{item.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{item.body}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      <section id="what" className="scroll-mt-8 py-16" aria-labelledby="what-heading">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <h2 id="what-heading" className="text-2xl font-semibold">
-            What we are trying to do
-          </h2>
-          <p className="mt-3 max-w-2xl text-muted-foreground">
-            Open one GPUI window. See the page. See the tools. Fill the schema.
-            Execute. Watch the log. First against fake tools, then against a
-            real Chrome tab. Stop before LLM, replay, or OS sidecars.
-          </p>
-          <div className="mt-10 grid gap-4 md:grid-cols-2">
-            <article className="rounded-xl border border-border bg-card p-6">
-              <h3 className="text-lg font-medium">
-                <Link
-                  to="/webmcp"
-                  className="text-foreground hover:text-accent transition-colors duration-200 cursor-pointer"
-                >
-                  WebMCP, in one sentence
-                </Link>
-              </h3>
-              <p className="mt-3 text-muted-foreground">
-                A website can publish a short menu of actions — search products,
-                create a note — that a debugger or assistant can call on that
-                page. Chrome is still experimental. The API lives on the
-                document, not in our Rust window.
-              </p>
-              <Link
-                to="/webmcp"
-                className="mt-4 inline-flex min-h-11 items-center text-sm text-accent hover:underline cursor-pointer"
-              >
-                Read the simple version
-              </Link>
-            </article>
-            <article className="rounded-xl border border-border bg-card p-6">
-              <h3 className="text-lg font-medium">
-                <Link
-                  to="/gpui"
-                  className="text-foreground hover:text-accent transition-colors duration-200 cursor-pointer"
-                >
-                  GPUI, in one sentence
-                </Link>
-              </h3>
-              <p className="mt-3 text-muted-foreground">
-                Zed’s toolkit for drawing native app windows on the GPU. It is
-                not a browser. It cannot see page tools by itself. That is why
-                a tiny extension exists: a pipe, not a second UI.
-              </p>
-              <Link
-                to="/gpui"
-                className="mt-4 inline-flex min-h-11 items-center text-sm text-accent hover:underline cursor-pointer"
-              >
-                Read the simple version
-              </Link>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-t border-border bg-card py-16" aria-labelledby="how-heading">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <h2 id="how-heading" className="text-2xl font-semibold">
-            How it works
-          </h2>
-          <p className="mt-2 max-w-2xl text-muted-foreground">
-            GPUI first, Chrome second. The UI never imports Chrome types.
-          </p>
-          <ol className="mt-8 grid gap-4 md:grid-cols-3">
-            {steps.map((step) => (
-              <li key={step.n} className="rounded-xl border border-border bg-background p-5">
-                <p className="font-mono text-sm text-accent">{step.n}</p>
-                <h3 className="mt-2 font-medium">{step.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{step.body}</p>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-8 font-mono text-sm text-muted-foreground">
-            Chrome tab → WebMCP → extension → localhost socket → GPUI
-          </p>
-        </div>
-      </section>
-
-      <section className="py-16" aria-labelledby="warn-heading">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div
-            className="rounded-xl border border-destructive bg-muted p-5"
-            role="note"
-            aria-labelledby="warn-heading"
-          >
-            <h2 id="warn-heading" className="font-medium text-destructive">
-              Local-dev only
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              Do not leave the extension loaded on untrusted sites. Execute runs
-              in the tab as the logged-in user. The socket binds 127.0.0.1 and
-              only accepts the extension origin — that is hardening, not a
-              production security boundary.
+      <section id="what" className="mt-16 scroll-mt-8" aria-labelledby="what-heading">
+        <h2 id="what-heading" className="t-label m-0 border-b border-hair pb-2 font-normal">
+          What we are trying to do
+        </h2>
+        <p className="mt-4 text-mute">
+          Open one GPUI window. See the page. See the tools. Fill the schema.
+          Run. Read the history. First against sample data, then against a
+          real Chrome tab. Stop before LLM, replay, or OS sidecars.
+        </p>
+        <div className="mt-6 flex flex-col gap-6">
+          <article>
+            <p className="m-0">WebMCP, in one sentence</p>
+            <p className="m-0 text-mute">
+              A website can publish a short menu of actions, search products,
+              create a note, that a debugger or assistant can call on that
+              page. Chrome is still experimental. The API lives on the
+              document, not in our Rust window.
             </p>
-          </div>
+            <Link to="/webmcp" className="act">
+              Read the simple version ›
+            </Link>
+          </article>
+          <article>
+            <p className="m-0">GPUI, in one sentence</p>
+            <p className="m-0 text-mute">
+              Zed’s toolkit for drawing native app windows on the GPU. It is
+              not a browser. It cannot see page tools by itself. That is why a
+              tiny extension exists: a pipe, not a second UI.
+            </p>
+            <Link to="/gpui" className="act">
+              Read the simple version ›
+            </Link>
+          </article>
         </div>
       </section>
 
-      <section className="border-t border-border bg-card py-16" aria-labelledby="faq-heading">
-        <div className="mx-auto max-w-3xl px-4 sm:px-6">
-          <h2 id="faq-heading" className="text-2xl font-semibold">
-            Questions
-          </h2>
-          <div className="mt-6 divide-y divide-border rounded-xl border border-border bg-background">
-            {faqs.map((item) => (
-              <details key={item.q} className="group p-4">
-                <summary className="min-h-11 cursor-pointer list-none font-medium after:float-right after:text-muted-foreground after:content-['+'] group-open:after:content-['–']">
-                  {item.q}
-                </summary>
-                <p className="mt-3 text-sm text-muted-foreground">{item.a}</p>
-              </details>
-            ))}
-          </div>
+      <section className="mt-16" aria-labelledby="how-heading">
+        <h2 id="how-heading" className="t-label m-0 border-b border-hair pb-2 font-normal">
+          How it works
+        </h2>
+        <p className="mt-4 text-mute">GPUI first, Chrome second. The UI never imports Chrome types.</p>
+        <ol className="m-0 mt-6 list-none p-0">
+          {steps.map((step) => (
+            <li key={step.n} className="mb-6 flex gap-4">
+              <span className="t-label w-4 shrink-0 pt-[5px]">{step.n}</span>
+              <div>
+                <p className="m-0">{step.title}</p>
+                <p className="m-0 text-mute">{step.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p className="t-label m-0 mt-2">Chrome tab → WebMCP → extension → localhost socket → GPUI</p>
+      </section>
+
+      <section className="mt-16" aria-labelledby="warn-heading">
+        <h2 id="warn-heading" className="t-label m-0 border-b border-hair pb-2 font-normal text-accent">
+          Local-dev only
+        </h2>
+        <p className="mt-4 text-mute">
+          Do not leave the extension loaded on untrusted sites. Run executes in
+          the tab as the logged-in user. The socket binds 127.0.0.1 and only
+          accepts the extension origin. That is hardening, not a production
+          security boundary.
+        </p>
+      </section>
+
+      <section className="mt-16" aria-labelledby="faq-heading">
+        <h2 id="faq-heading" className="t-label m-0 border-b border-hair pb-2 font-normal">
+          Questions
+        </h2>
+        <div className="mt-2">
+          {faqs.map((item) => (
+            <details key={item.q} className="group border-b border-hair py-2">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 text-ink">
+                {item.q}
+                <span className="t-label" aria-hidden="true">
+                  <span className="group-open:hidden">show</span>
+                  <span className="hidden group-open:inline">hide</span>
+                </span>
+              </summary>
+              <p className="m-0 pb-2 text-mute">{item.a}</p>
+            </details>
+          ))}
         </div>
       </section>
 
-      <section className="py-16" aria-labelledby="cta-heading">
-        <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
-          <h2 id="cta-heading" className="text-2xl font-semibold">
-            Run the window
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-            Clone the repo, then{" "}
-            <code className="font-mono text-foreground">cargo run -p debugger</code>
-            . Click the status pill for Fixture. Load the extension when you
-            want a live tab.
-          </p>
-          <a
-            href={GITHUB}
-            className="mt-8 inline-flex min-h-11 items-center rounded-md bg-accent px-5 text-sm font-medium text-on-accent hover:opacity-90 transition-opacity duration-200 cursor-pointer"
-          >
-            Open GitHub
+      <section className="mt-16" aria-labelledby="cta-heading">
+        <Rule>Run the window</Rule>
+        <p className="mt-4 text-mute">
+          Clone the repo, then <span className="text-ink">cargo run -p debugger</span>. Press ⌃T for the
+          playground. Load the extension when you want a live tab.
+        </p>
+        <p className="mt-2 flex flex-wrap items-center gap-8">
+          <a href={GITHUB} className="act">
+            Open GitHub ›
           </a>
-        </div>
+          <Link to="/try" className="act">
+            Or try WebMCP here first ›
+          </Link>
+        </p>
       </section>
     </main>
   );

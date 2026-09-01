@@ -2,43 +2,45 @@ import { Link } from "@tanstack/react-router";
 
 const GITHUB = "https://github.com/Avik-creator/gpuiXwebmcp";
 
-const navClass = "min-h-11 inline-flex items-center px-2 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer";
-const activeNavClass = "text-foreground";
+const PLACES = [
+  { to: "/", label: "OVERVIEW" },
+  { to: "/webmcp", label: "WEBMCP" },
+  { to: "/gpui", label: "GPUI" },
+  { to: "/try", label: "TRY IT" },
+] as const;
 
+const placeClass = "t-label inline-flex min-h-11 items-center text-mute hover:text-ink transition-colors duration-150";
+
+/** The bar: places on the left with the current one lit, a report on the right. */
 export function SiteHeader() {
   return (
-    <header className="border-b border-border bg-card">
+    <header className="h-14 shrink-0">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-accent focus:px-3 focus:py-2 focus:text-on-accent"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-paper focus:px-3 focus:py-2 focus:text-ink"
       >
         Skip to content
       </a>
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link
-          to="/"
-          className="min-h-11 inline-flex items-center gap-2 text-sm font-medium tracking-[0.08em] uppercase text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
-        >
-          <span className="size-2 rounded-full bg-accent" aria-hidden="true" />
-          gpuiXwebmcp
-        </Link>
-        <nav aria-label="Primary" className="flex flex-wrap items-center justify-end gap-1">
-          <Link to="/" hash="what" className={navClass} activeProps={{ className: activeNavClass }}>
-            What it is
+      <div className="mx-auto flex h-full max-w-5xl items-center justify-between gap-6 px-6 sm:px-10">
+        <nav aria-label="Primary" className="flex items-center gap-6 overflow-x-auto">
+          <Link to="/" className="t-label inline-flex min-h-11 shrink-0 items-center text-mute hover:text-ink transition-colors duration-150">
+            ‹ gpuiXwebmcp
           </Link>
-          <Link to="/webmcp" className={navClass} activeProps={{ className: activeNavClass }}>
-            WebMCP
-          </Link>
-          <Link to="/gpui" className={navClass} activeProps={{ className: activeNavClass }}>
-            GPUI
-          </Link>
-          <a
-            href={GITHUB}
-            className="min-h-11 inline-flex items-center rounded-md bg-accent px-3 text-sm font-medium text-on-accent hover:opacity-90 transition-opacity duration-200 cursor-pointer"
-          >
-            View repo
-          </a>
+          {PLACES.map((place) => (
+            <Link
+              key={place.to}
+              to={place.to}
+              className={`${placeClass} shrink-0`}
+              activeOptions={{ exact: place.to === "/" }}
+              activeProps={{ className: "text-ink" }}
+            >
+              {place.label}
+            </Link>
+          ))}
         </nav>
+        <a href={GITHUB} className="t-label inline-flex min-h-11 shrink-0 items-center text-mute hover:text-ink transition-colors duration-150">
+          GitHub ›
+        </a>
       </div>
     </header>
   );

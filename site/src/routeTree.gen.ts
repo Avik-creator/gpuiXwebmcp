@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as GpuiRouteImport } from './routes/gpui'
+import { Route as TryRouteImport } from './routes/try'
 import { Route as WebmcpRouteImport } from './routes/webmcp'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const GpuiRoute = GpuiRouteImport.update({
   path: '/gpui',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TryRoute = TryRouteImport.update({
+  id: '/try',
+  path: '/try',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WebmcpRoute = WebmcpRouteImport.update({
   id: '/webmcp',
   path: '/webmcp',
@@ -32,30 +38,34 @@ const WebmcpRoute = WebmcpRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/gpui': typeof GpuiRoute
+  '/try': typeof TryRoute
   '/webmcp': typeof WebmcpRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/gpui': typeof GpuiRoute
+  '/try': typeof TryRoute
   '/webmcp': typeof WebmcpRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/gpui': typeof GpuiRoute
+  '/try': typeof TryRoute
   '/webmcp': typeof WebmcpRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/gpui' | '/webmcp'
+  fullPaths: '/' | '/gpui' | '/try' | '/webmcp'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/gpui' | '/webmcp'
-  id: '__root__' | '/' | '/gpui' | '/webmcp'
+  to: '/' | '/gpui' | '/try' | '/webmcp'
+  id: '__root__' | '/' | '/gpui' | '/try' | '/webmcp'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   GpuiRoute: typeof GpuiRoute
+  TryRoute: typeof TryRoute
   WebmcpRoute: typeof WebmcpRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GpuiRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/try': {
+      id: '/try'
+      path: '/try'
+      fullPath: '/try'
+      preLoaderRoute: typeof TryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/webmcp': {
       id: '/webmcp'
       path: '/webmcp'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   GpuiRoute: GpuiRoute,
+  TryRoute: TryRoute,
   WebmcpRoute: WebmcpRoute,
 }
 export const routeTree = rootRouteImport

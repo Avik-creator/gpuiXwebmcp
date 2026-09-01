@@ -1,6 +1,6 @@
 # gpuiXwebmcp site
 
-Explainer for the native WebMCP debugger. Palette is taken from the debugger's own tokens in `crates/debugger/src/theme.rs` — near-black ground `#0A0A0A`, warm bone ink `#E6E1D3`, rust `#C45C3A` for faults only. Keep the two in step; the site previously claimed a palette the app had already replaced.
+Explainer for the native WebMCP debugger. Drawn with the debugger's own tokens from `crates/debugger/src/theme.rs`: paper `#0A0A0A`, ink `#E6E1D3`, mute `#8A8577`, hair `#2A2724`, and rust `#C45C3A` for faults only, all in the same monospace face and the same three type sizes. Keep the two in step.
 
 ```sh
 cd site
@@ -8,6 +8,6 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000/](http://localhost:3000/). Routes: `/`, `/webmcp`, `/gpui`.
+Open [http://localhost:3000/](http://localhost:3000/). Routes: `/`, `/webmcp`, `/gpui`, `/try`. The last one is a WebMCP host of its own: paste a tool, it registers on `document.modelContext`, and the debugger lists it like any other site.
 
 Other scripts: `npm run build`, `npm run preview`, `npm run generate-routes` (`tsr generate`).

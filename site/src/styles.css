@@ -1,23 +1,15 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 
-/* These are the debugger's own tokens, not a separate palette. Keep them in step
-   with crates/debugger/src/theme.rs — the site claiming a palette it did not have
-   is exactly what went wrong before. Near-black ground, warm bone ink, rust for
-   fault only. Not slate, not Tailwind green. */
+/* The debugger's own tokens (crates/debugger/src/theme.rs), not a separate palette. */
 @theme {
-  --color-background: #0a0a0a;
-  --color-foreground: #e6e1d3;
-  --color-card: #121210;
-  --color-muted: #1c1c18;
-  --color-muted-foreground: #8a8577;
-  --color-border: #2a2724;
+  --color-paper: #0a0a0a;
+  --color-ink: #e6e1d3;
+  --color-mute: #8a8577;
+  --color-hair: #2a2724;
   --color-accent: #c45c3a;
-  --color-on-accent: #0a0a0a;
-  --color-selected: #1c1c18;
-  --color-destructive: #c45c3a;
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Monaco, monospace;
+  --font-mono: Menlo, "SF Mono", "JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --font-sans: var(--font-mono);
 }
 
 * {
@@ -36,16 +28,122 @@ html {
 
 body {
   margin: 0;
-  font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.5;
-  color: var(--color-foreground);
-  background: var(--color-background);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 24px;
+  color: var(--color-ink);
+  background: var(--color-paper);
+}
+
+::selection {
+  background: rgba(230, 225, 211, 0.28);
 }
 
 :focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: 2px;
+  outline: 1px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
+@layer components {
+  /* The three voices the app has: chrome, prose, and the one thing in focus. */
+  .t-label {
+    font-size: 11px;
+    line-height: 14px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-mute);
+  }
+
+  .t-body {
+    font-size: 14px;
+    line-height: 24px;
+  }
+
+  .t-focus {
+    font-size: 22px;
+    line-height: 30px;
+    color: var(--color-ink);
+  }
+
+  .t-hero {
+    font-size: 30px;
+    line-height: 38px;
+    color: var(--color-ink);
+  }
+
+  /* Text fields: dashed hairline on paper, as in the window. */
+  .field {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px dashed var(--color-hair);
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font: inherit;
+    border-radius: 0;
+  }
+
+  .field::placeholder {
+    color: var(--color-mute);
+  }
+
+  .field:focus-visible {
+    outline: 1px solid var(--color-ink);
+    outline-offset: 0;
+  }
+
+  textarea.field {
+    resize: vertical;
+    line-height: 22px;
+  }
+
+  /* Text buttons in the chrome voice. Lit when they do something, hair when not. */
+  .act {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 11px;
+    line-height: 14px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-ink);
+    cursor: pointer;
+    transition: color 150ms ease;
+  }
+
+  .act:hover {
+    color: var(--color-mute);
+  }
+
+  .act:disabled {
+    color: var(--color-hair);
+    cursor: default;
+  }
+
+  /* A quiet link: underlined by a hairline, rust on hover as in the window. */
+  .quiet {
+    color: var(--color-ink);
+    text-decoration: none;
+    border-bottom: 1px solid var(--color-ink);
+    padding-bottom: 2px;
+    transition: color 150ms ease, border-color 150ms ease;
+  }
+
+  .quiet:hover {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+}
+
+pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -59,5 +157,26 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  /* A value you pick by clicking the word itself, as the window does for enums and booleans. */
+  .word {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--color-mute);
+    cursor: pointer;
+    transition: color 150ms ease;
+  }
+
+  .word:hover,
+  .word[aria-pressed="true"] {
+    color: var(--color-ink);
   }
 }
